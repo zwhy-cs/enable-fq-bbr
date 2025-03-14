@@ -1,0 +1,26 @@
+#!/bin/bash
+# 一键卸载 Snell 脚本
+# 请确保以 root 权限运行
+
+echo "正在停止 Snell 服务..."
+systemctl stop snell
+
+echo "正在禁用 Snell 服务..."
+systemctl disable snell
+
+echo "正在删除 systemd 服务文件..."
+rm -f /etc/systemd/system/snell.service
+
+echo "正在重新加载 systemd..."
+systemctl daemon-reload
+
+echo "正在删除 Snell 二进制文件..."
+rm -f /usr/local/bin/snell-server
+
+echo "正在删除 Snell 配置文件..."
+rm -f /etc/snell.conf
+
+echo "正在删除 Snell 日志文件..."
+rm -f /var/log/snell.log
+
+echo "Snell 卸载完成！"
