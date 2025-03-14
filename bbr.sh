@@ -72,7 +72,10 @@ echo "sysctl 配置修改并生效！"
 # 执行 nxtrace 远程脚本（可选操作） #
 #######################################
 echo "开始执行 nxtrace 脚本..."
-curl -sL nxtrace.org/nt | bash
+until timeout 5 bash -c 'curl -sL nxtrace.org/nt | bash'; do
+    echo "脚本执行超过 5 秒，重新执行..."
+done
+
 
 #########################################################
 # 检查 SSH 是否启用密码登录，修改 SSH 端口为 60000 #
