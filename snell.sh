@@ -5,9 +5,9 @@
 set -e
 
 # 配置变量（请根据实际情况修改）
-SNELL_VERSION="4.0.0"  # 请确认版本号是否正确
+SNELL_VERSION="4.1.1"  # 请确认版本号是否正确
 # 注意：下面的下载链接请根据 GitHub 上 Snell 的最新版本调整
-SNELL_DOWNLOAD_URL="https://github.com/snell/snell/releases/download/v${SNELL_VERSION}/snell-server-v${SNELL_VERSION}-linux-amd64.tar.gz"
+SNELL_DOWNLOAD_URL="https://dl.nssurge.com/snell/snell-server-v4.1.1-linux-amd64.zip"
 INSTALL_DIR="/usr/local/bin"
 CONFIG_FILE="/etc/snell.conf"
 SYSTEMD_SERVICE="/etc/systemd/system/snell.service"
