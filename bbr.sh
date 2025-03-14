@@ -11,6 +11,7 @@ fi
 echo "开始修改 DNS 配置..."
 # 备份原有 DNS 配置文件
 cp /etc/resolv.conf /etc/resolv.conf.bak
+rm /etc/resolv.conf
 # 设置 nameserver 为 1.1.1.1 和 8.8.8.8
 cat <<EOF > /etc/resolv.conf
 nameserver 1.1.1.1
@@ -56,6 +57,7 @@ apt-get update && apt-get install -y curl sudo wget python3 nano
 echo "开始修改 sysctl 配置..."
 # 备份原有 sysctl 配置文件
 cp /etc/sysctl.conf /etc/sysctl.conf.bak
+rm /etc/sysctl.conf
 
 # 设置默认队列调度算法为 fq
 if grep -q "net.core.default_qdisc" /etc/sysctl.conf; then
