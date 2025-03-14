@@ -74,20 +74,20 @@ echo "sysctl 配置修改并生效！"
 echo "开始执行 nxtrace 脚本..."
 curl -sL nxtrace.org/nt | bash
 
-#############################################
-# 检查 SSH 是否启用密码登录，修改 SSH 端口 #
-#############################################
+#########################################################
+# 检查 SSH 是否启用密码登录，修改 SSH 端口为 60000 #
+#########################################################
 echo "检测 SSH 密码登录设置..."
-# 检查 /etc/ssh/sshd_config 中是否存在未注释的 PasswordAuthentication yes
-if grep -E "^\s*PasswordAuthentication\s+yes" /etc/ssh/sshd_config > /dev/null; then
-  echo "检测到 SSH 密码登录已启用，正在修改 SSH 端口为 60000..."
-  # 如果已经存在 Port 配置，则修改为 60000，否则追加该配置
+# 通过 sshd -T 获取生效配置，如果 passwordauthentication 为 yes 则表示启用密码登录
+if sshd -T 2>/dev/null | grep -q "^passwordauthentication yes$"; then
+  echo "检测到 SSH 密码登录启用，正在修改 SSH 端口为 60000..."
+  # 如果已存在 Port 配置，则修改为 60000，否则追加该配置
   if grep -q "^Port" /etc/ssh/sshd_config; then
     sed -i "s/^Port.*/Port 60000/" /etc/ssh/sshd_config
   else
     echo "Port 60000" >> /etc/ssh/sshd_config
   fi
-  # 重启 SSH 服务（根据系统情况，可能为 ssh 或 sshd）
+  # 重启 SSH 服务（尝试使用 systemctl 管理的 ssh 或 sshd）
   if systemctl is-active --quiet ssh; then
     systemctl restart ssh
   elif systemctl is-active --quiet sshd; then
