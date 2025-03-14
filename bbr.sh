@@ -5,6 +5,20 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
+#####################
+# 修改 DNS 配置部分 #
+#####################
+echo "开始修改 DNS 配置..."
+# 备份原有 DNS 配置文件
+cp /etc/resolv.conf /etc/resolv.conf.bak
+rm /etc/resolv.conf
+# 设置 nameserver 为 1.1.1.1 和 8.8.8.8
+cat <<EOF > /etc/resolv.conf
+nameserver 1.1.1.1
+nameserver 8.8.8.8
+EOF
+echo "DNS 配置修改完成，备份在 /etc/resolv.conf.bak"
+
 #############################################################
 # 修改 APT 源为官方源（覆盖 /etc/apt/sources.list 内容） #
 #############################################################
@@ -37,19 +51,6 @@ echo "APT 源已修改为官方源，备份文件在 /etc/apt/sources.list.bak"
 echo "开始安装必要的软件包..."
 apt-get update && apt-get install -y curl sudo wget python3 nano
 
-#####################
-# 修改 DNS 配置部分 #
-#####################
-echo "开始修改 DNS 配置..."
-# 备份原有 DNS 配置文件
-cp /etc/resolv.conf /etc/resolv.conf.bak
-rm /etc/resolv.conf
-# 设置 nameserver 为 1.1.1.1 和 8.8.8.8
-cat <<EOF > /etc/resolv.conf
-nameserver 1.1.1.1
-nameserver 8.8.8.8
-EOF
-echo "DNS 配置修改完成，备份在 /etc/resolv.conf.bak"
 
 ##############################
 # 修改 sysctl 配置（fq、bbr） #
