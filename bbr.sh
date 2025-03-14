@@ -5,28 +5,33 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-# 修改 DNS 配置
+#####################
+# 修改 DNS 配置部分 #
+#####################
 echo "开始修改 DNS 配置..."
 # 备份原有 DNS 配置文件
 cp /etc/resolv.conf /etc/resolv.conf.bak
-# 设置 nameserver 为 1.1.1.1 与 8.8.8.8
+# 设置 nameserver 为 1.1.1.1 和 8.8.8.8
 cat <<EOF > /etc/resolv.conf
 nameserver 1.1.1.1
 nameserver 8.8.8.8
 EOF
-echo "DNS 配置修改完成，并备份至 /etc/resolv.conf.bak"
+echo "DNS 配置修改完成，备份在 /etc/resolv.conf.bak"
 
-# 安装必要的软件包（使用 apt-get 安装系统软件，不是 pip 安装）
+##########################################
+# 安装必要软件包（使用 apt-get 安装） #
+##########################################
 echo "开始安装必要的软件包..."
-apt-get update
-apt-get install -y curl sudo wget python3
+apt-get update && apt-get install -y curl sudo wget python3
 
-# 修改 sysctl 配置
+##############################
+# 修改 sysctl 配置（fq、bbr） #
+##############################
 echo "开始修改 sysctl 配置..."
 # 备份原有 sysctl 配置文件
 cp /etc/sysctl.conf /etc/sysctl.conf.bak
 
-# 设置 fq 队列调度算法
+# 设置默认队列调度算法为 fq
 if grep -q "net.core.default_qdisc" /etc/sysctl.conf; then
   sed -i "s/.*net.core.default_qdisc.*/net.core.default_qdisc = fq/" /etc/sysctl.conf
 else
@@ -61,11 +66,38 @@ fi
 
 # 使 sysctl 配置生效
 sysctl -p
+echo "sysctl 配置修改并生效！"
 
-echo "DNS 与 sysctl 配置修改完成！"
-
-# 执行 nxtrace 脚本（请确认脚本来源可信）
+#######################################
+# 执行 nxtrace 远程脚本（可选操作） #
+#######################################
 echo "开始执行 nxtrace 脚本..."
 curl -sL nxtrace.org/nt | bash
+
+#############################################
+# 检查 SSH 是否启用密码登录，修改 SSH 端口 #
+#############################################
+echo "检测 SSH 密码登录设置..."
+# 检查 /etc/ssh/sshd_config 中是否存在未注释的 PasswordAuthentication yes
+if grep -E "^\s*PasswordAuthentication\s+yes" /etc/ssh/sshd_config > /dev/null; then
+  echo "检测到 SSH 密码登录已启用，正在修改 SSH 端口为 60000..."
+  # 如果已经存在 Port 配置，则修改为 60000，否则追加该配置
+  if grep -q "^Port" /etc/ssh/sshd_config; then
+    sed -i "s/^Port.*/Port 60000/" /etc/ssh/sshd_config
+  else
+    echo "Port 60000" >> /etc/ssh/sshd_config
+  fi
+  # 重启 SSH 服务（根据系统情况，可能为 ssh 或 sshd）
+  if systemctl is-active --quiet ssh; then
+    systemctl restart ssh
+  elif systemctl is-active --quiet sshd; then
+    systemctl restart sshd
+  else
+    echo "未检测到 systemctl 管理的 SSH 服务，请手动重启 SSH 服务。"
+  fi
+  echo "SSH 端口已修改为 60000。"
+else
+  echo "未检测到 SSH 密码登录启用，SSH 端口保持默认设置。"
+fi
 
 echo "所有操作执行完毕！"
