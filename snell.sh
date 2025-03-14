@@ -65,11 +65,10 @@ rm -rf "$TMP_DIR"
 # 生成配置文件
 echo "正在创建配置文件 ${CONFIG_FILE}..."
 cat > ${CONFIG_FILE} <<EOF
-{
-    "listen": ":${PORT}",
-    "psk": "${PSK}",
-    "log": "${LOG_FILE}"
-}
+[snell-server]
+listen = 0.0.0.0:${PORT}
+psk = ${PSK}
+ipv6 = false
 EOF
 
 # 创建日志文件
