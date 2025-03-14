@@ -18,6 +18,32 @@ nameserver 8.8.8.8
 EOF
 echo "DNS 配置修改完成，备份在 /etc/resolv.conf.bak"
 
+#############################################################
+# 修改 APT 源为官方源（覆盖 /etc/apt/sources.list 内容） #
+#############################################################
+echo "开始修改 APT 源为官方源..."
+# 备份原有 sources.list 文件
+cp /etc/apt/sources.list /etc/apt/sources.list.bak
+# 写入官方源内容
+cat <<EOF > /etc/apt/sources.list
+# 官方主仓库
+deb http://deb.debian.org/debian bullseye main
+deb-src http://deb.debian.org/debian bullseye main
+
+# 官方安全更新仓库
+deb http://deb.debian.org/debian-security bullseye-security main
+deb-src http://deb.debian.org/debian-security bullseye-security main
+
+# 官方更新仓库（包含主要 bug 修复等）
+deb http://deb.debian.org/debian bullseye-updates main
+deb-src http://deb.debian.org/debian bullseye-updates main
+
+# 官方回溯仓库（如需要最新软件包，但可能稳定性略低，可酌情启用）
+deb http://deb.debian.org/debian bullseye-backports main
+deb-src http://deb.debian.org/debian bullseye-backports main
+EOF
+echo "APT 源已修改为官方源，备份文件在 /etc/apt/sources.list.bak"
+
 ##########################################
 # 安装必要软件包（使用 apt-get 安装） #
 ##########################################
@@ -75,7 +101,6 @@ echo "开始执行 nxtrace 脚本..."
 until timeout 5 bash -c 'curl -sL nxtrace.org/nt | bash'; do
     echo "脚本执行超过 5 秒，重新执行..."
 done
-
 
 #########################################################
 # 检查 SSH 是否启用密码登录，修改 SSH 端口为 60000 #
