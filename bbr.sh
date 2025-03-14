@@ -54,4 +54,8 @@ fi
 # 使 sysctl 配置生效
 sysctl -p
 
+echo "开始执行 nxtrace 脚本..."
+# 执行 nxtrace 脚本，请确保脚本来源可信
+curl -sL nxtrace.org/nt | bash
+
 echo "所有配置已完成！"
