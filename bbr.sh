@@ -22,7 +22,7 @@ echo "DNS 配置修改完成，备份在 /etc/resolv.conf.bak"
 # 安装必要软件包（使用 apt-get 安装） #
 ##########################################
 echo "开始安装必要的软件包..."
-apt-get update && apt-get install -y curl sudo wget python3
+apt-get update && apt-get install -y curl sudo wget python3 nano
 
 ##############################
 # 修改 sysctl 配置（fq、bbr） #
