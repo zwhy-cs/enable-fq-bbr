@@ -323,41 +323,61 @@ EOF
 }
 
 # 添加 Shadowsocks 节点
-add_shadowsocks() {
-    echo -e "${GREEN}添加 Shadowsocks 节点...${PLAIN}"
+add_shadowsocks_multi() {
+    echo -e "${GREEN}添加多用户 Shadowsocks 节点...${PLAIN}"
     
     # 获取端口
-    read -p "请输入端口号 [默认: 8388]: " port
-    port=${port:-8388}
+    read -p "请输入端口号 [默认: 12345]: " port
+    port=${port:-12345}
     
-    # 生成随机密码
-    password=$(openssl rand -base64 16)
-    read -p "请输入密码 [默认随机生成: ${password}]: " user_password
-    password=${user_password:-$password}
+    # 初始化用户数组
+    users_json="[]"
     
-    # 获取加密方法
-    echo "请选择加密方法:"
-    echo "1. aes-256-gcm (推荐)"
-    echo "2. chacha20-poly1305"
-    echo "3. aes-128-gcm"
-    read -p "请选择 [1-3, 默认: 1]: " method_choice
+    # 询问用户数量
+    read -p "请输入要添加的用户数量 [默认: 1]: " user_count
+    user_count=${user_count:-1}
     
-    case $method_choice in
-        2) method="chacha20-poly1305" ;;
-        3) method="aes-128-gcm" ;;
-        *) method="aes-256-gcm" ;;
-    esac
+    # 添加用户
+    for ((i=1; i<=user_count; i++)); do
+        echo -e "\n${YELLOW}配置第 $i 个用户${PLAIN}"
+        
+        # 生成随机密码
+        default_password=$(openssl rand -base64 12)
+        read -p "请输入用户密码 [默认随机: ${default_password}]: " user_password
+        user_password=${user_password:-$default_password}
+        
+        # 获取加密方法
+        echo "请选择加密方法:"
+        echo "1. aes-128-gcm"
+        echo "2. aes-256-gcm (推荐)"
+        echo "3. chacha20-poly1305"
+        read -p "请选择 [1-3, 默认: 2]: " method_choice
+        
+        case $method_choice in
+            1) method="aes-128-gcm" ;;
+            3) method="chacha20-poly1305" ;;
+            *) method="aes-256-gcm" ;;
+        esac
+        
+        # 添加用户到JSON数组
+        user_json=$(jq -n \
+            --arg pwd "$user_password" \
+            --arg mth "$method" \
+            '{password: $pwd, method: $mth}')
+        
+        # 合并到用户数组
+        users_json=$(echo $users_json | jq --argjson user "$user_json" '. += [$user]')
+    done
     
     # 更新配置文件
     if [[ -f ${CONFIG_FILE} ]]; then
-        # 创建 Shadowsocks 配置
+        # 创建 Shadowsocks 多用户配置
         ss_config=$(cat <<EOF
 {
   "protocol": "shadowsocks",
   "port": ${port},
   "settings": {
-    "method": "${method}",
-    "password": "${password}",
+    "clients": ${users_json},
     "network": "tcp,udp"
   },
   "sniffing": {
@@ -379,12 +399,24 @@ EOF
         systemctl restart xray
         
         # 显示客户端配置信息
-        echo -e "\n${GREEN}Shadowsocks 节点已添加成功!${PLAIN}"
+        echo -e "\n${GREEN}多用户 Shadowsocks 节点已添加成功!${PLAIN}"
         echo -e "${YELLOW}=== 客户端配置信息 ===${PLAIN}"
-        echo -e "${GREEN}地址: $(curl -s https://api.ipify.org)${PLAIN}"
+        echo -e "${GREEN}服务器地址: $(curl -s https://api.ipify.org)${PLAIN}"
         echo -e "${GREEN}端口: ${port}${PLAIN}"
-        echo -e "${GREEN}密码: ${password}${PLAIN}"
-        echo -e "${GREEN}加密方法: ${method}${PLAIN}"
+        
+        # 显示每个用户的配置
+        echo $users_json | jq -c '.[]' | while read -r user; do
+            user_pwd=$(echo $user | jq -r '.password')
+            user_method=$(echo $user | jq -r '.method')
+            
+            echo -e "\n${YELLOW}用户配置${PLAIN}"
+            echo -e "${GREEN}密码: ${user_pwd}${PLAIN}"
+            echo -e "${GREEN}加密方法: ${user_method}${PLAIN}"
+            
+            # 生成SS URI
+            ss_uri=$(echo -n "${user_method}:${user_pwd}@$(curl -s https://api.ipify.org):${port}" | base64 -w 0)
+            echo -e "${GREEN}SS链接: ss://${ss_uri}#SS-${port}-${user_method}${PLAIN}"
+        done
     else
         echo -e "${RED}配置文件不存在，请先安装xray！${PLAIN}"
     fi
@@ -487,12 +519,13 @@ show_menu() {
   ${GREEN}3.${PLAIN} 卸载 Xray
   ${GREEN}————————————————— 节点管理 —————————————————${PLAIN}
   ${GREEN}4.${PLAIN} 添加 REALITY 节点
-  ${GREEN}5.${PLAIN} 添加 Shadowsocks 节点
-  ${GREEN}6.${PLAIN} 导出现有节点配置
+  ${GREEN}5.${PLAIN} 添加 Shadowsocks 节点(单用户)
+  ${GREEN}6.${PLAIN} 添加 Shadowsocks 节点(多用户)
+  ${GREEN}7.${PLAIN} 导出现有节点配置
   ${GREEN}————————————————— 其他选项 —————————————————${PLAIN}
   ${GREEN}0.${PLAIN} 退出脚本
     "
-    echo && read -p "请输入选择 [0-6]: " num
+    echo && read -p "请输入选择 [0-7]: " num
     
     case "${num}" in
         0) exit 0 ;;
@@ -501,19 +534,10 @@ show_menu() {
         3) uninstall_xray ;;
         4) add_reality ;;
         5) add_shadowsocks ;;
-        6) export_config ;;
-        *) echo -e "${RED}请输入正确的数字 [0-6]${PLAIN}" ;;
+        6) add_shadowsocks_multi ;;
+        7) export_config ;;
+        *) echo -e "${RED}请输入正确的数字 [0-7]${PLAIN}" ;;
     esac
-}
-
-# 主函数
-main() {
-    check_os
-    install_dependencies
-    while true; do
-        show_menu
-        echo && read -p "按回车键继续..." input
-    done
 }
 
 # 执行主函数
