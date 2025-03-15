@@ -625,3 +625,4 @@ main() {
         read -n 1 -s key
     done
 }
+main
