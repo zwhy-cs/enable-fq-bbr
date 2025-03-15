@@ -603,6 +603,7 @@ export_config() {
     fi
 }
 # 删除节点
+# 删除节点
 delete_node() {
     echo -e "${GREEN}删除节点...${PLAIN}"
     
@@ -615,19 +616,63 @@ delete_node() {
             return
         fi
         
-        echo -e "${YELLOW}当前配置的节点列表:${PLAIN}"
+        # 创建节点列表，对配对的REALITY节点进行特殊处理
+        declare -a node_list
+        declare -a is_reality_pair
+        declare -a reality_primary_index
+        declare -a node_description
         
+        # 首先检测REALITY节点对
         for ((i=0; i<${inbound_count}; i++)); do
             protocol=$(jq -r ".inbounds[$i].protocol" ${CONFIG_FILE})
             port=$(jq -r ".inbounds[$i].port" ${CONFIG_FILE})
+            tag=$(jq -r ".inbounds[$i].tag // \"未命名\"" ${CONFIG_FILE})
             
-            echo -e "${GREEN}[$i] 协议: ${protocol}, 端口: ${port}${PLAIN}"
+            # 检查是否是dokodemo-door且是REALITY配置的一部分
+            if [[ "$protocol" == "dokodemo-door" && "$tag" == "dokodemo-in" ]]; then
+                # 查找关联的vless入站
+                internal_port=$(jq -r ".inbounds[$i].settings.port" ${CONFIG_FILE})
+                for ((j=0; j<${inbound_count}; j++)); do
+                    if [[ $i -ne $j ]]; then
+                        inner_protocol=$(jq -r ".inbounds[$j].protocol" ${CONFIG_FILE})
+                        inner_port=$(jq -r ".inbounds[$j].port" ${CONFIG_FILE})
+                        inner_listen=$(jq -r ".inbounds[$j].listen // \"0.0.0.0\"" ${CONFIG_FILE})
+                        
+                        # 检查是否为关联的vless REALITY入站
+                        if [[ "$inner_protocol" == "vless" && "$inner_port" == "$internal_port" && "$inner_listen" == "127.0.0.1" ]]; then
+                            security=$(jq -r ".inbounds[$j].streamSettings.security // \"none\"" ${CONFIG_FILE})
+                            if [[ "$security" == "reality" ]]; then
+                                # 找到REALITY配对
+                                node_list+=($i)
+                                is_reality_pair+=("true")
+                                reality_primary_index+=($i)
+                                node_description+=("REALITY节点 [dokodemo-door端口:${port} + vless端口:${internal_port}]")
+                                break
+                            fi
+                        fi
+                    fi
+                done
+            elif [[ "$protocol" != "vless" || $(jq -r ".inbounds[$i].listen // \"0.0.0.0\"" ${CONFIG_FILE}) != "127.0.0.1" ]]; then
+                # 不是REALITY节点的内部vless入站，添加到常规列表
+                security=$(jq -r ".inbounds[$i].streamSettings.security // \"none\"" ${CONFIG_FILE})
+                node_list+=($i)
+                is_reality_pair+=("false")
+                reality_primary_index+=(-1)
+                node_description+=("${protocol}节点 [端口:${port}]")
+            fi
         done
         
-        read -p "请输入要删除的节点编号 [0-$((inbound_count-1))]: " node_index
+        echo -e "${YELLOW}当前配置的节点列表:${PLAIN}"
+        
+        # 显示可删除的节点
+        for ((i=0; i<${#node_list[@]}; i++)); do
+            echo -e "${GREEN}[$i] ${node_description[$i]}${PLAIN}"
+        done
+        
+        read -p "请输入要删除的节点编号 [0-$((${#node_list[@]}-1))]: " delete_index
         
         # 验证输入
-        if [[ ! "$node_index" =~ ^[0-9]+$ ]] || [ "$node_index" -ge "$inbound_count" ]; then
+        if [[ ! "$delete_index" =~ ^[0-9]+$ ]] || [ "$delete_index" -ge "${#node_list[@]}" ]; then
             echo -e "${RED}输入无效！请输入有效的节点编号。${PLAIN}"
             return
         fi
@@ -635,14 +680,80 @@ delete_node() {
         # 备份配置
         cp ${CONFIG_FILE} ${CONFIG_FILE}.bak
         
-        # 删除指定的入站配置
-        jq "del(.inbounds[$node_index])" ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
-        mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
+        # 获取对应的实际节点索引
+        actual_index=${node_list[$delete_index]}
+        
+        # 检查是否是REALITY节点对
+        if [[ "${is_reality_pair[$delete_index]}" == "true" ]]; then
+            echo -e "${YELLOW}正在删除REALITY节点配对...${PLAIN}"
+            
+            # 找到dokodemo-door和对应的vless入站
+            dokodemo_index=$actual_index
+            internal_port=$(jq -r ".inbounds[$dokodemo_index].settings.port" ${CONFIG_FILE})
+            vless_index=-1
+            
+            # 查找对应的vless入站
+            for ((i=0; i<${inbound_count}; i++)); do
+                protocol=$(jq -r ".inbounds[$i].protocol" ${CONFIG_FILE})
+                port=$(jq -r ".inbounds[$i].port" ${CONFIG_FILE})
+                listen=$(jq -r ".inbounds[$i].listen // \"0.0.0.0\"" ${CONFIG_FILE})
+                
+                if [[ "$protocol" == "vless" && "$port" == "$internal_port" && "$listen" == "127.0.0.1" ]]; then
+                    security=$(jq -r ".inbounds[$i].streamSettings.security // \"none\"" ${CONFIG_FILE})
+                    if [[ "$security" == "reality" ]]; then
+                        vless_index=$i
+                        break
+                    fi
+                fi
+            done
+            
+            if [[ $vless_index -ne -1 ]]; then
+                # 删除dokodemo-door和vless入站
+                # 获取删除前的配置内容
+                temp_config=$(cat ${CONFIG_FILE})
+                
+                # 删除对应的路由规则
+                server_name=$(jq -r ".inbounds[$vless_index].streamSettings.realitySettings.serverNames[0]" <<< "$temp_config")
+                
+                temp_config=$(jq "del(.routing.rules[] | select(.domain != null and .domain[0] == \"${server_name}\"))" <<< "$temp_config")
+                temp_config=$(jq "del(.routing.rules[] | select(.inboundTag != null and .inboundTag[0] == \"dokodemo-in\"))" <<< "$temp_config")
+                
+                # 如果要删除的vless_index小于dokodemo_index，先删除vless_index
+                if [[ $vless_index -lt $dokodemo_index ]]; then
+                    temp_config=$(jq "del(.inbounds[$vless_index])" <<< "$temp_config")
+                    # dokodemo_index索引需要减1
+                    dokodemo_index=$((dokodemo_index-1))
+                    temp_config=$(jq "del(.inbounds[$dokodemo_index])" <<< "$temp_config")
+                else
+                    temp_config=$(jq "del(.inbounds[$dokodemo_index])" <<< "$temp_config")
+                    # vless_index索引需要减1
+                    vless_index=$((vless_index-1))
+                    temp_config=$(jq "del(.inbounds[$vless_index])" <<< "$temp_config")
+                fi
+                
+                echo "$temp_config" > ${CONFIG_FILE}
+                
+                echo -e "${GREEN}已删除REALITY节点配对 (dokodemo-door和vless入站)以及相关路由规则！${PLAIN}"
+            else
+                echo -e "${RED}未找到对应的REALITY vless入站配置，只删除dokodemo-door入站！${PLAIN}"
+                jq "del(.inbounds[$dokodemo_index])" ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
+                mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
+                
+                # 删除对应的路由规则
+                jq "del(.routing.rules[] | select(.inboundTag != null and .inboundTag[0] == \"dokodemo-in\"))" ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
+                mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
+            fi
+        else {
+            # 普通节点直接删除
+            echo -e "${YELLOW}正在删除${node_description[$delete_index]}...${PLAIN}"
+            jq "del(.inbounds[${actual_index}])" ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
+            mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
+            echo -e "${GREEN}节点已成功删除！${PLAIN}"
+        }
+        fi
         
         # 重启xray服务
         systemctl restart xray
-        
-        echo -e "${GREEN}节点已成功删除！${PLAIN}"
     else
         echo -e "${RED}配置文件不存在，请先安装xray！${PLAIN}"
     fi
