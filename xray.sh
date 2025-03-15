@@ -231,7 +231,8 @@ EOF
                 "${server_name}"
             ],
             "privateKey": "${private_key}",
-            "shortIds": ${short_ids_json}
+            "shortIds": ${short_ids_json},
+            "publicKey": "${public_key}"
         }
     },
     "sniffing": {
@@ -555,10 +556,10 @@ export_config() {
                     uuid=$(jq -r ".inbounds[$i].settings.clients[0].id" ${CONFIG_FILE})
                     server_name=$(jq -r ".inbounds[$i].streamSettings.realitySettings.serverNames[0]" ${CONFIG_FILE})
                     private_key=$(jq -r ".inbounds[$i].streamSettings.realitySettings.privateKey" ${CONFIG_FILE})
-                    short_id=$(jq -r ".inbounds[$i].streamSettings.realitySettings.shortIds[0]" ${CONFIG_FILE})
+                    short_id=$(jq -r ".inbounds[$i].streamSettings.realitySettings.shortIds[1]" ${CONFIG_FILE})
                     
                     # 通过私钥计算公钥
-                    public_key=$(echo "${private_key}" | xray x25519 -i - | grep "Public" | awk '{print $3}')
+                    public_key=$(jq -r ".inbounds[$i].streamSettings.realitySettings.publicKey" ${CONFIG_FILE})
                     
                     echo -e "\n${YELLOW}==== REALITY 客户端配置 ====${PLAIN}" > ${export_dir}/client_${i}_reality.txt
                     echo -e "协议: VLESS" >> ${export_dir}/client_${i}_reality.txt
