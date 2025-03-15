@@ -359,10 +359,6 @@ add_shadowsocks() {
     "method": "${method}",
     "password": "${password}",
     "network": "tcp,udp"
-  },
-  "sniffing": {
-    "enabled": true,
-    "destOverride": ["http", "tls"]
   }
 }
 EOF
@@ -451,10 +447,6 @@ add_shadowsocks_multi() {
   "settings": {
     "clients": ${users_json},
     "network": "tcp,udp"
-  },
-  "sniffing": {
-    "enabled": true,
-    "destOverride": ["http", "tls"]
   }
 }
 EOF
