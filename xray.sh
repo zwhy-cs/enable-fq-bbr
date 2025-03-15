@@ -183,49 +183,113 @@ add_reality() {
     private_key=$(echo "$key_pair" | grep "Private" | awk '{print $3}')
     public_key=$(echo "$key_pair" | grep "Public" | awk '{print $3}')
     
-    # 获取端口
-    read -p "请输入端口号 [默认: 443]: " port
+    # 获取端口 (对外端口)
+    read -p "请输入外部端口号 [默认: 443]: " port
     port=${port:-443}
     
+    # 内部端口
+    internal_port=4431
+    
     # 获取服务器名称
-    read -p "请输入服务器名称(SNI) [例如: www.microsoft.com]: " server_name
-    server_name=${server_name:-www.microsoft.com}
+    read -p "请输入服务器名称(SNI) [例如: speed.cloudflare.com]: " server_name
+    server_name=${server_name:-speed.cloudflare.com}
     
     # 获取短ID
-    short_id=$(openssl rand -hex 8)
+    short_ids_json=$(jq -n --arg id1 "" --arg id2 "$(openssl rand -hex 8)" '[$id1, $id2]')
     
     # 更新配置文件
     if [[ -f ${CONFIG_FILE} ]]; then
-        # 创建 REALITY 配置
-        reality_config=$(cat <<EOF
+        # 创建新的配置
+        new_config=$(cat <<EOF
 {
-  "protocol": "vless",
-  "port": ${port},
-  "settings": {
-    "clients": [
-      {
-        "id": "${uuid}",
-        "flow": "xtls-rprx-vision"
-      }
+    "log": {
+        "loglevel": "warning",
+        "access": "${LOG_DIR}/access.log",
+        "error": "${LOG_DIR}/error.log"
+    },
+    "inbounds": [
+        {
+            "tag": "dokodemo-in",
+            "port": ${port},
+            "protocol": "dokodemo-door",
+            "settings": {
+                "address": "127.0.0.1",
+                "port": ${internal_port},
+                "network": "tcp"
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": [
+                    "tls"
+                ],
+                "routeOnly": true
+            }
+        },
+        {
+            "listen": "127.0.0.1",
+            "port": ${internal_port},
+            "protocol": "vless",
+            "settings": {
+                "clients": [
+                    {
+                        "id": "${uuid}",
+                        "flow": "xtls-rprx-vision"
+                    }
+                ],
+                "decryption": "none"
+            },
+            "streamSettings": {
+                "network": "tcp",
+                "security": "reality",
+                "realitySettings": {
+                    "dest": "${server_name}:443",
+                    "serverNames": [
+                        "${server_name}"
+                    ],
+                    "privateKey": "${private_key}",
+                    "shortIds": ${short_ids_json}
+                }
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": [
+                    "http",
+                    "tls",
+                    "quic"
+                ],
+                "routeOnly": true
+            }
+        }
     ],
-    "decryption": "none"
-  },
-  "streamSettings": {
-    "network": "tcp",
-    "security": "reality",
-    "realitySettings": {
-      "show": false,
-      "dest": "${server_name}:443",
-      "xver": 0,
-      "serverNames": ["${server_name}"],
-      "privateKey": "${private_key}",
-      "shortIds": ["${short_id}"]
+    "outbounds": [
+        {
+            "protocol": "freedom",
+            "tag": "direct"
+        },
+        {
+            "protocol": "blackhole",
+            "tag": "block"
+        }
+    ],
+    "routing": {
+        "rules": [
+            {
+                "inboundTag": [
+                    "dokodemo-in"
+                ],
+                "domain": [
+                    "${server_name}"
+                ],
+                "outboundTag": "direct"
+            },
+            {
+                "inboundTag": [
+                    "dokodemo-in"
+                ],
+                "outboundTag": "block"
+            }
+        ]
     }
-  },
-  "sniffing": {
-    "enabled": true,
-    "destOverride": ["http", "tls"]
-  }
 }
 EOF
 )
@@ -233,15 +297,14 @@ EOF
         # 备份配置文件
         cp ${CONFIG_FILE} ${CONFIG_FILE}.bak
         
-        # 添加新的入站配置
-        jq --argjson new_inbound "$reality_config" '.inbounds += [$new_inbound]' ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
-        mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
+        # 直接覆盖配置文件
+        echo $new_config > ${CONFIG_FILE}
         
         # 重启xray服务
         systemctl restart xray
         
         # 显示客户端配置信息
-        echo -e "\n${GREEN}REALITY 节点已添加成功!${PLAIN}"
+        echo -e "\n${GREEN}安全的 REALITY 节点已添加成功!${PLAIN}"
         echo -e "${YELLOW}=== 客户端配置信息 ===${PLAIN}"
         echo -e "${GREEN}协议: VLESS${PLAIN}"
         echo -e "${GREEN}地址: $(curl -s https://api.ipify.org)${PLAIN}"
@@ -252,7 +315,8 @@ EOF
         echo -e "${GREEN}安全层: reality${PLAIN}"
         echo -e "${GREEN}SNI: ${server_name}${PLAIN}"
         echo -e "${GREEN}PublicKey: ${public_key}${PLAIN}"
-        echo -e "${GREEN}ShortID: ${short_id}${PLAIN}"
+        echo -e "${GREEN}ShortID: $(echo $short_ids_json | jq -r '.[1]')${PLAIN}"
+        echo -e "${GREEN}请注意：这是使用dokodemo-door代理的安全Reality配置${PLAIN}"
     else
         echo -e "${RED}配置文件不存在，请先安装xray！${PLAIN}"
     fi
