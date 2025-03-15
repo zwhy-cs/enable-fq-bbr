@@ -71,8 +71,7 @@ install_update_xray() {
     mkdir -p ${LOG_DIR}
     
     # 如果配置文件不存在，创建一个基本配置
-    if [[ ! -f ${CONFIG_FILE} ]]; then
-        cat > ${CONFIG_FILE} <<-EOF
+    cat >${CONFIG_FILE} <<-EOF
 {
     "log": {
         "loglevel": "warning",
@@ -83,6 +82,7 @@ install_update_xray() {
     "outbounds": []
 }
 EOF
+
     fi
     
     # 设置权限
