@@ -383,7 +383,7 @@ export_config() {
                     echo -e "${GREEN}已导出 REALITY 客户端配置到 ${export_dir}/client_${i}_reality.txt${PLAIN}"
                     
                     # 生成分享链接
-                    share_link="vless://${uuid}@$(curl -s https://api.ipify.org):${port}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${server_name}&fp=chrome&pbk=${public_key}&sid=${short_id}&type=tcp#REALITY-${port}"
+                    share_link="vless://${uuid}@$(curl -s https://api.ipify.org):${port}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${server_name}&fp=chrome&pbk=${public_key}&sid=${short_id}"
                     echo -e "${GREEN}分享链接: ${share_link}${PLAIN}" >> ${export_dir}/client_${i}_reality.txt
                 fi
             elif [[ "$protocol" == "shadowsocks" ]]; then
