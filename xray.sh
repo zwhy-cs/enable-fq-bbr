@@ -408,6 +408,7 @@ EOF
 
 # 导出现有配置
 # 导出现有配置
+# 导出现有配置
 export_config() {
     echo -e "${GREEN}导出现有节点配置...${PLAIN}"
     
@@ -426,6 +427,8 @@ export_config() {
         declare -a node_list
         declare -a node_type
         
+        # 使用专门的计数器来显示连续的索引
+        count=0
         for ((i=0; i<${inbound_count}; i++)); do
             protocol=$(jq -r ".inbounds[$i].protocol" ${CONFIG_FILE})
             port=$(jq -r ".inbounds[$i].port" ${CONFIG_FILE})
@@ -437,17 +440,20 @@ export_config() {
                     internal_port=$(jq -r ".inbounds[$i].settings.port" ${CONFIG_FILE})
                     node_list+=($i)
                     node_type+=("reality")
-                    echo -e "${GREEN}[$i] REALITY节点 (外部端口: ${port})${PLAIN}"
+                    echo -e "${GREEN}[${count}] REALITY节点 (外部端口: ${port})${PLAIN}"
+                    count=$((count+1))
                 else
                     node_list+=($i)
                     node_type+=("other")
-                    echo -e "${GREEN}[$i] ${protocol}节点 (端口: ${port})${PLAIN}"
+                    echo -e "${GREEN}[${count}] ${protocol}节点 (端口: ${port})${PLAIN}"
+                    count=$((count+1))
                 fi
             elif [[ "$protocol" == "shadowsocks" ]]; then
                 # Shadowsocks节点
                 node_list+=($i)
                 node_type+=("ss")
-                echo -e "${GREEN}[$i] Shadowsocks节点 (端口: ${port})${PLAIN}"
+                echo -e "${GREEN}[${count}] Shadowsocks节点 (端口: ${port})${PLAIN}"
+                count=$((count+1))
             elif [[ "$protocol" == "vless" ]]; then
                 listen=$(jq -r ".inbounds[$i].listen // \"0.0.0.0\"" ${CONFIG_FILE})
                 if [[ "$listen" == "127.0.0.1" ]]; then
@@ -456,12 +462,14 @@ export_config() {
                 else
                     node_list+=($i)
                     node_type+=("vless")
-                    echo -e "${GREEN}[$i] VLESS节点 (端口: ${port})${PLAIN}"
+                    echo -e "${GREEN}[${count}] VLESS节点 (端口: ${port})${PLAIN}"
+                    count=$((count+1))
                 fi
             else
                 node_list+=($i)
                 node_type+=("other")
-                echo -e "${GREEN}[$i] ${protocol}节点 (端口: ${port})${PLAIN}"
+                echo -e "${GREEN}[${count}] ${protocol}节点 (端口: ${port})${PLAIN}"
+                count=$((count+1))
             fi
         done
         
