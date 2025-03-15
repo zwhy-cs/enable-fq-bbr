@@ -710,6 +710,8 @@ show_menu() {
         5) add_shadowsocks ;;
         6) add_shadowsocks_multi ;;
         7) export_config ;;
+        8) delete_node ;;
+        9) view_log ;;
         *) echo -e "${RED}请输入正确的数字 [0-7]${PLAIN}" ;;
     esac
 }
