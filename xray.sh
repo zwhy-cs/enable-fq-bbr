@@ -676,6 +676,154 @@ view_log() {
             ;;
     esac
 }
+# 查看当前Xray配置
+view_config() {
+    echo -e "${GREEN}查看当前Xray配置...${PLAIN}"
+    
+    if [[ -f ${CONFIG_FILE} ]]; then
+        # 检查jq是否安装
+        if ! command -v jq &> /dev/null; then
+            echo -e "${YELLOW}jq工具未安装，正在安装...${PLAIN}"
+            if [[ $release = "centos" ]]; then
+                yum install -y jq
+            else
+                apt update -y && apt install -y jq
+            fi
+        fi
+        
+        # 获取基本信息
+        echo -e "${BLUE}基本配置信息:${PLAIN}"
+        
+        # 获取日志级别
+        log_level=$(jq -r '.log.loglevel' ${CONFIG_FILE})
+        echo -e "${GREEN}日志级别: ${log_level}${PLAIN}"
+        
+        # 获取日志路径
+        access_log=$(jq -r '.log.access' ${CONFIG_FILE})
+        error_log=$(jq -r '.log.error' ${CONFIG_FILE})
+        echo -e "${GREEN}访问日志: ${access_log}${PLAIN}"
+        echo -e "${GREEN}错误日志: ${error_log}${PLAIN}"
+        
+        # 获取入站配置
+        inbound_count=$(jq '.inbounds | length' ${CONFIG_FILE})
+        echo -e "\n${BLUE}入站配置 (${inbound_count}个):${PLAIN}"
+        
+        # 创建节点列表
+        declare -a normal_nodes
+        declare -a reality_nodes
+        
+        # 识别节点类型
+        for ((i=0; i<${inbound_count}; i++)); do
+            protocol=$(jq -r ".inbounds[$i].protocol" ${CONFIG_FILE})
+            port=$(jq -r ".inbounds[$i].port" ${CONFIG_FILE})
+            tag=$(jq -r ".inbounds[$i].tag // \"未命名\"" ${CONFIG_FILE})
+            listen=$(jq -r ".inbounds[$i].listen // \"0.0.0.0\"" ${CONFIG_FILE})
+            
+            # 检查是否是REALITY配对的一部分
+            if [[ "$protocol" == "dokodemo-door" && "$tag" == "dokodemo-in" ]]; then
+                # 找到关联的vless配置
+                internal_port=$(jq -r ".inbounds[$i].settings.port" ${CONFIG_FILE})
+                for ((j=0; j<${inbound_count}; j++)); do
+                    if [[ $i -ne $j ]]; then
+                        inner_protocol=$(jq -r ".inbounds[$j].protocol" ${CONFIG_FILE})
+                        inner_port=$(jq -r ".inbounds[$j].port" ${CONFIG_FILE})
+                        inner_listen=$(jq -r ".inbounds[$j].listen // \"0.0.0.0\"" ${CONFIG_FILE})
+                        
+                        if [[ "$inner_protocol" == "vless" && "$inner_port" == "$internal_port" && "$inner_listen" == "127.0.0.1" ]]; then
+                            security=$(jq -r ".inbounds[$j].streamSettings.security // \"none\"" ${CONFIG_FILE})
+                            if [[ "$security" == "reality" ]]; then
+                                # REALITY配对
+                                server_name=$(jq -r ".inbounds[$j].streamSettings.realitySettings.serverNames[0]" ${CONFIG_FILE})
+                                uuid=$(jq -r ".inbounds[$j].settings.clients[0].id" ${CONFIG_FILE})
+                                public_key=$(jq -r ".inbounds[$j].streamSettings.realitySettings.publicKey" ${CONFIG_FILE})
+                                short_id=$(jq -r ".inbounds[$j].streamSettings.realitySettings.shortIds[1] // \"\"" ${CONFIG_FILE})
+                                
+                                reality_info="协议: VLESS+REALITY, 外部端口: ${port}, UUID: ${uuid:0:8}..., SNI: ${server_name}"
+                                reality_nodes+=("$reality_info")
+                                break
+                            fi
+                        fi
+                    fi
+                done
+            elif [[ "$protocol" != "vless" || "$listen" != "127.0.0.1" ]]; then
+                # 普通节点
+                if [[ "$protocol" == "shadowsocks" ]]; then
+                    # 检查是单用户还是多用户
+                    if jq -e ".inbounds[$i].settings.password" ${CONFIG_FILE} > /dev/null; then
+                        # 单用户
+                        method=$(jq -r ".inbounds[$i].settings.method" ${CONFIG_FILE})
+                        node_info="协议: Shadowsocks(单用户), 端口: ${port}, 加密方式: ${method}"
+                    else
+                        # 多用户
+                        clients_count=$(jq ".inbounds[$i].settings.clients | length" ${CONFIG_FILE})
+                        node_info="协议: Shadowsocks(多用户-${clients_count}个), 端口: ${port}"
+                    fi
+                else
+                    node_info="协议: ${protocol}, 端口: ${port}"
+                fi
+                normal_nodes+=("$node_info")
+            fi
+        done
+        
+        # 显示REALITY节点
+        if [[ ${#reality_nodes[@]} -gt 0 ]]; then
+            echo -e "${YELLOW}REALITY节点:${PLAIN}"
+            for ((i=0; i<${#reality_nodes[@]}; i++)); do
+                echo -e "${GREEN}  [$i] ${reality_nodes[$i]}${PLAIN}"
+            done
+        fi
+        
+        # 显示普通节点
+        if [[ ${#normal_nodes[@]} -gt 0 ]]; then
+            echo -e "${YELLOW}其他节点:${PLAIN}"
+            for ((i=0; i<${#normal_nodes[@]}; i++)); do
+                echo -e "${GREEN}  [$i] ${normal_nodes[$i]}${PLAIN}"
+            done
+        fi
+        
+        # 获取出站配置
+        outbound_count=$(jq '.outbounds | length' ${CONFIG_FILE})
+        echo -e "\n${BLUE}出站配置 (${outbound_count}个):${PLAIN}"
+        
+        for ((i=0; i<${outbound_count}; i++)); do
+            protocol=$(jq -r ".outbounds[$i].protocol" ${CONFIG_FILE})
+            tag=$(jq -r ".outbounds[$i].tag // \"未命名\"" ${CONFIG_FILE})
+            echo -e "${GREEN}  [$i] 协议: ${protocol}, 标签: ${tag}${PLAIN}"
+        done
+        
+        # 检查路由规则
+        echo -e "\n${BLUE}路由规则:${PLAIN}"
+        if jq -e '.routing.rules' ${CONFIG_FILE} > /dev/null; then
+            rules_count=$(jq '.routing.rules | length' ${CONFIG_FILE})
+            echo -e "${GREEN}  规则数量: ${rules_count}${PLAIN}"
+            
+            for ((i=0; i<${rules_count}; i++)); do
+                inbound_tag=$(jq -r ".routing.rules[$i].inboundTag // []" ${CONFIG_FILE})
+                outbound_tag=$(jq -r ".routing.rules[$i].outboundTag // \"未指定\"" ${CONFIG_FILE})
+                domain=$(jq -r ".routing.rules[$i].domain // []" ${CONFIG_FILE})
+                
+                echo -e "${GREEN}  [$i] 入站标签: ${inbound_tag}, 出站标签: ${outbound_tag}${PLAIN}"
+                if [[ "$domain" != "[]" ]]; then
+                    echo -e "${GREEN}      域名: ${domain}${PLAIN}"
+                fi
+            done
+        else
+            echo -e "${YELLOW}  未配置路由规则${PLAIN}"
+        fi
+        
+        # 显示查看完整配置的选项
+        echo -e "\n${YELLOW}是否查看完整配置文件内容? [y/n]: ${PLAIN}"
+        read view_full
+        
+        if [[ "$view_full" == "y" || "$view_full" == "Y" ]]; then
+            echo -e "${BLUE}完整配置文件内容:${PLAIN}"
+            cat ${CONFIG_FILE} | jq
+        fi
+        
+    else
+        echo -e "${RED}配置文件不存在，请先安装xray！${PLAIN}"
+    fi
+}
 # 显示菜单
 show_menu() {
     clear
@@ -693,10 +841,11 @@ show_menu() {
   ${GREEN}6.${PLAIN} 导出现有节点配置
   ${GREEN}7.${PLAIN} 删除节点
   ${GREEN}8.${PLAIN} 查看 Xray 日志
+  ${GREEN}9.${PLAIN} 查看当前 Xray 配置
   ${GREEN}————————————————— 其他选项 —————————————————${PLAIN}
   ${GREEN}0.${PLAIN} 退出脚本
     "
-    echo && read -p "请输入选择 [0-8]: " num
+    echo && read -p "请输入选择 [0-9]: " num
     
     case "${num}" in
         0) exit 0 ;;
@@ -708,7 +857,8 @@ show_menu() {
         6) export_config ;;
         7) delete_node ;;
         8) view_log ;;
-        *) echo -e "${RED}请输入正确的数字 [0-8]${PLAIN}" ;;
+        9) view_config ;;
+        *) echo -e "${RED}请输入正确的数字 [0-9]${PLAIN}" ;;
     esac
 }
 
