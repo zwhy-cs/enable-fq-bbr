@@ -231,7 +231,8 @@ EOF
                 "${server_name}"
             ],
             "privateKey": "${private_key}",
-            "shortIds": ${short_ids_json}
+            "shortIds": ${short_ids_json},
+            "publicKey": "${public_key}"
         }
     },
     "sniffing": {
@@ -555,10 +556,10 @@ export_config() {
                     uuid=$(jq -r ".inbounds[$i].settings.clients[0].id" ${CONFIG_FILE})
                     server_name=$(jq -r ".inbounds[$i].streamSettings.realitySettings.serverNames[0]" ${CONFIG_FILE})
                     private_key=$(jq -r ".inbounds[$i].streamSettings.realitySettings.privateKey" ${CONFIG_FILE})
-                    short_id=$(jq -r ".inbounds[$i].streamSettings.realitySettings.shortIds[0]" ${CONFIG_FILE})
+                    short_id=$(jq -r ".inbounds[$i].streamSettings.realitySettings.shortIds[1]" ${CONFIG_FILE})
                     
                     # 通过私钥计算公钥
-                    public_key=$(echo "${private_key}" | xray x25519 -i - | grep "Public" | awk '{print $3}')
+                    public_key=$(jq -r ".inbounds[$i].streamSettings.realitySettings.publicKey" ${CONFIG_FILE})
                     
                     echo -e "\n${YELLOW}==== REALITY 客户端配置 ====${PLAIN}" > ${export_dir}/client_${i}_reality.txt
                     echo -e "协议: VLESS" >> ${export_dir}/client_${i}_reality.txt
@@ -601,7 +602,82 @@ export_config() {
         echo -e "${RED}配置文件不存在，请先安装xray！${PLAIN}"
     fi
 }
-
+# 删除节点
+delete_node() {
+    echo -e "${GREEN}删除节点...${PLAIN}"
+    
+    if [[ -f ${CONFIG_FILE} ]]; then
+        # 获取入站配置数量
+        inbound_count=$(jq '.inbounds | length' ${CONFIG_FILE})
+        
+        if [[ ${inbound_count} -eq 0 ]]; then
+            echo -e "${YELLOW}当前没有配置任何节点！${PLAIN}"
+            return
+        fi
+        
+        echo -e "${YELLOW}当前配置的节点列表:${PLAIN}"
+        
+        for ((i=0; i<${inbound_count}; i++)); do
+            protocol=$(jq -r ".inbounds[$i].protocol" ${CONFIG_FILE})
+            port=$(jq -r ".inbounds[$i].port" ${CONFIG_FILE})
+            
+            echo -e "${GREEN}[$i] 协议: ${protocol}, 端口: ${port}${PLAIN}"
+        done
+        
+        read -p "请输入要删除的节点编号 [0-$((inbound_count-1))]: " node_index
+        
+        # 验证输入
+        if [[ ! "$node_index" =~ ^[0-9]+$ ]] || [ "$node_index" -ge "$inbound_count" ]; then
+            echo -e "${RED}输入无效！请输入有效的节点编号。${PLAIN}"
+            return
+        fi
+        
+        # 备份配置
+        cp ${CONFIG_FILE} ${CONFIG_FILE}.bak
+        
+        # 删除指定的入站配置
+        jq "del(.inbounds[$node_index])" ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
+        mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
+        
+        # 重启xray服务
+        systemctl restart xray
+        
+        echo -e "${GREEN}节点已成功删除！${PLAIN}"
+    else
+        echo -e "${RED}配置文件不存在，请先安装xray！${PLAIN}"
+    fi
+}
+# 查看 Xray 日志
+view_log() {
+    echo -e "${GREEN}查看 Xray 日志...${PLAIN}"
+    
+    echo "请选择要查看的日志类型:"
+    echo "1. 访问日志 (access.log)"
+    echo "2. 错误日志 (error.log)"
+    read -p "请选择 [1-2]: " log_choice
+    
+    case "$log_choice" in
+        1)
+            if [ -f "${LOG_DIR}/access.log" ]; then
+                echo -e "${YELLOW}最近50行访问日志:${PLAIN}"
+                tail -n 50 ${LOG_DIR}/access.log
+            else
+                echo -e "${RED}访问日志文件不存在！${PLAIN}"
+            fi
+            ;;
+        2)
+            if [ -f "${LOG_DIR}/error.log" ]; then
+                echo -e "${YELLOW}最近50行错误日志:${PLAIN}"
+                tail -n 50 ${LOG_DIR}/error.log
+            else
+                echo -e "${RED}错误日志文件不存在！${PLAIN}"
+            fi
+            ;;
+        *)
+            echo -e "${RED}输入无效！${PLAIN}"
+            ;;
+    esac
+}
 # 显示菜单
 show_menu() {
     clear
@@ -618,6 +694,8 @@ show_menu() {
   ${GREEN}5.${PLAIN} 添加 Shadowsocks 节点(单用户)
   ${GREEN}6.${PLAIN} 添加 Shadowsocks 节点(多用户)
   ${GREEN}7.${PLAIN} 导出现有节点配置
+  ${GREEN}8.${PLAIN} 删除节点
+  ${GREEN}9.${PLAIN} 查看 Xray 日志
   ${GREEN}————————————————— 其他选项 —————————————————${PLAIN}
   ${GREEN}0.${PLAIN} 退出脚本
     "
