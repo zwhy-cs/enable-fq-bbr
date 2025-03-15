@@ -407,6 +407,7 @@ EOF
 
 
 # 导出现有配置
+# 导出现有配置
 export_config() {
     echo -e "${GREEN}导出现有节点配置...${PLAIN}"
     
@@ -421,70 +422,139 @@ export_config() {
         
         echo -e "${YELLOW}当前配置的节点列表:${PLAIN}"
         
-        # 创建导出目录
-        export_dir="/root/xray_config_export"
-        mkdir -p ${export_dir}
+        # 显示节点列表
+        declare -a node_list
+        declare -a node_type
         
         for ((i=0; i<${inbound_count}; i++)); do
             protocol=$(jq -r ".inbounds[$i].protocol" ${CONFIG_FILE})
             port=$(jq -r ".inbounds[$i].port" ${CONFIG_FILE})
             
-            echo -e "${GREEN}[$i] 协议: ${protocol}, 端口: ${port}${PLAIN}"
-            
-            # 导出详细配置到文件
-            jq ".inbounds[$i]" ${CONFIG_FILE} > ${export_dir}/node_${i}_${protocol}_${port}.json
-            
-            # 生成客户端配置信息
-            if [[ "$protocol" == "vless" ]]; then
-                security=$(jq -r ".inbounds[$i].streamSettings.security" ${CONFIG_FILE})
-                
-                # 针对REALITY配置生成客户端信息
-                if [[ "$security" == "reality" ]]; then
-                    uuid=$(jq -r ".inbounds[$i].settings.clients[0].id" ${CONFIG_FILE})
-                    server_name=$(jq -r ".inbounds[$i].streamSettings.realitySettings.serverNames[0]" ${CONFIG_FILE})
-                    private_key=$(jq -r ".inbounds[$i].streamSettings.realitySettings.privateKey" ${CONFIG_FILE})
-                    short_id=$(jq -r ".inbounds[$i].streamSettings.realitySettings.shortIds[1]" ${CONFIG_FILE})
-                    
-                    # 通过私钥计算公钥
-                    public_key=$(jq -r ".inbounds[$i].streamSettings.realitySettings.publicKey" ${CONFIG_FILE})
-                    
-                    echo -e "\n${YELLOW}==== REALITY 客户端配置 ====${PLAIN}" > ${export_dir}/client_${i}_reality.txt
-                    echo -e "协议: VLESS" >> ${export_dir}/client_${i}_reality.txt
-                    echo -e "地址: $(curl -s https://api.ipify.org)" >> ${export_dir}/client_${i}_reality.txt
-                    echo -e "端口: ${port}" >> ${export_dir}/client_${i}_reality.txt
-                    echo -e "UUID: ${uuid}" >> ${export_dir}/client_${i}_reality.txt
-                    echo -e "流控: xtls-rprx-vision" >> ${export_dir}/client_${i}_reality.txt
-                    echo -e "传输协议: tcp" >> ${export_dir}/client_${i}_reality.txt
-                    echo -e "安全层: reality" >> ${export_dir}/client_${i}_reality.txt
-                    echo -e "SNI: ${server_name}" >> ${export_dir}/client_${i}_reality.txt
-                    echo -e "PublicKey: ${public_key}" >> ${export_dir}/client_${i}_reality.txt
-                    echo -e "ShortID: ${short_id}" >> ${export_dir}/client_${i}_reality.txt
-                    
-                    echo -e "${GREEN}已导出 REALITY 客户端配置到 ${export_dir}/client_${i}_reality.txt${PLAIN}"
-                    
-                    # 生成分享链接
-                    share_link="vless://${uuid}@$(curl -s https://api.ipify.org):${port}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${server_name}&fp=chrome&pbk=${public_key}&sid=${short_id}#REALITY-${port}"
-                    echo -e "${GREEN}分享链接: ${share_link}${PLAIN}" >> ${export_dir}/client_${i}_reality.txt
+            if [[ "$protocol" == "dokodemo-door" ]]; then
+                tag=$(jq -r ".inbounds[$i].tag // \"\"" ${CONFIG_FILE})
+                if [[ "$tag" == "dokodemo-in" ]]; then
+                    # REALITY节点的外部入口
+                    internal_port=$(jq -r ".inbounds[$i].settings.port" ${CONFIG_FILE})
+                    node_list+=($i)
+                    node_type+=("reality")
+                    echo -e "${GREEN}[$i] REALITY节点 (外部端口: ${port})${PLAIN}"
+                else
+                    node_list+=($i)
+                    node_type+=("other")
+                    echo -e "${GREEN}[$i] ${protocol}节点 (端口: ${port})${PLAIN}"
                 fi
             elif [[ "$protocol" == "shadowsocks" ]]; then
-                method=$(jq -r ".inbounds[$i].settings.method" ${CONFIG_FILE})
-                password=$(jq -r ".inbounds[$i].settings.password" ${CONFIG_FILE})
-                
-                echo -e "\n${YELLOW}==== Shadowsocks 客户端配置 ====${PLAIN}" > ${export_dir}/client_${i}_ss.txt
-                echo -e "地址: $(curl -s https://api.ipify.org)" >> ${export_dir}/client_${i}_ss.txt
-                echo -e "端口: ${port}" >> ${export_dir}/client_${i}_ss.txt
-                echo -e "密码: ${password}" >> ${export_dir}/client_${i}_ss.txt
-                echo -e "加密方法: ${method}" >> ${export_dir}/client_${i}_ss.txt
-                
-                echo -e "${GREEN}已导出 Shadowsocks 客户端配置到 ${export_dir}/client_${i}_ss.txt${PLAIN}"
-                
-                # 生成SS URI
-                ss_uri=$(echo -n "${method}:${password}@$(curl -s https://api.ipify.org):${port}" | base64 -w 0)
-                echo -e "${GREEN}SS链接: ss://${ss_uri}#SS-${port}${PLAIN}" >> ${export_dir}/client_${i}_ss.txt
+                # Shadowsocks节点
+                node_list+=($i)
+                node_type+=("ss")
+                echo -e "${GREEN}[$i] Shadowsocks节点 (端口: ${port})${PLAIN}"
+            elif [[ "$protocol" == "vless" ]]; then
+                listen=$(jq -r ".inbounds[$i].listen // \"0.0.0.0\"" ${CONFIG_FILE})
+                if [[ "$listen" == "127.0.0.1" ]]; then
+                    # 这可能是REALITY的内部配置，跳过
+                    continue
+                else
+                    node_list+=($i)
+                    node_type+=("vless")
+                    echo -e "${GREEN}[$i] VLESS节点 (端口: ${port})${PLAIN}"
+                fi
+            else
+                node_list+=($i)
+                node_type+=("other")
+                echo -e "${GREEN}[$i] ${protocol}节点 (端口: ${port})${PLAIN}"
             fi
         done
         
-        echo -e "\n${GREEN}所有配置已导出至 ${export_dir} 目录！${PLAIN}"
+        if [[ ${#node_list[@]} -eq 0 ]]; then
+            echo -e "${YELLOW}没有可导出的节点配置！${PLAIN}"
+            return
+        fi
+        
+        read -p "请选择要导出的节点 [0-$((${#node_list[@]}-1))]: " node_index
+        
+        # 验证输入
+        if [[ ! "$node_index" =~ ^[0-9]+$ ]] || [[ $node_index -ge ${#node_list[@]} ]]; then
+            echo -e "${RED}输入无效！请输入有效的节点编号。${PLAIN}"
+            return
+        fi
+        
+        selected_index=${node_list[$node_index]}
+        selected_type=${node_type[$node_index]}
+        
+        echo -e "\n${YELLOW}===== 节点详细配置 =====${PLAIN}"
+        
+        # 根据节点类型获取详细配置
+        if [[ "$selected_type" == "reality" ]]; then
+            # REALITY节点
+            port=$(jq -r ".inbounds[$selected_index].port" ${CONFIG_FILE})
+            internal_port=$(jq -r ".inbounds[$selected_index].settings.port" ${CONFIG_FILE})
+            
+            # 查找对应的vless入站
+            vless_index=-1
+            for ((i=0; i<${inbound_count}; i++)); do
+                protocol=$(jq -r ".inbounds[$i].protocol" ${CONFIG_FILE})
+                inner_port=$(jq -r ".inbounds[$i].port" ${CONFIG_FILE})
+                listen=$(jq -r ".inbounds[$i].listen // \"0.0.0.0\"" ${CONFIG_FILE})
+                
+                if [[ "$protocol" == "vless" && "$inner_port" == "$internal_port" && "$listen" == "127.0.0.1" ]]; then
+                    vless_index=$i
+                    break
+                fi
+            done
+            
+            if [[ $vless_index -ne -1 ]]; then
+                uuid=$(jq -r ".inbounds[$vless_index].settings.clients[0].id" ${CONFIG_FILE})
+                server_name=$(jq -r ".inbounds[$vless_index].streamSettings.realitySettings.serverNames[0]" ${CONFIG_FILE})
+                public_key=$(jq -r ".inbounds[$vless_index].streamSettings.realitySettings.publicKey" ${CONFIG_FILE})
+                short_id=$(jq -r ".inbounds[$vless_index].streamSettings.realitySettings.shortIds[1] // \"\"" ${CONFIG_FILE})
+                
+                echo -e "${GREEN}协议: ${PLAIN}VLESS+REALITY"
+                echo -e "${GREEN}地址: ${PLAIN}$(curl -s https://api.ipify.org)"
+                echo -e "${GREEN}端口: ${PLAIN}${port}"
+                echo -e "${GREEN}UUID: ${PLAIN}${uuid}"
+                echo -e "${GREEN}流控: ${PLAIN}xtls-rprx-vision"
+                echo -e "${GREEN}传输协议: ${PLAIN}tcp"
+                echo -e "${GREEN}安全层: ${PLAIN}reality"
+                echo -e "${GREEN}SNI: ${PLAIN}${server_name}"
+                echo -e "${GREEN}PublicKey: ${PLAIN}${public_key}"
+                echo -e "${GREEN}ShortID: ${PLAIN}${short_id}"
+                
+                # 生成分享链接
+                share_link="vless://${uuid}@$(curl -s https://api.ipify.org):${port}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${server_name}&fp=chrome&pbk=${public_key}&sid=${short_id}#REALITY-${port}"
+                echo -e "\n${GREEN}分享链接: ${PLAIN}${share_link}"
+            else
+                echo -e "${RED}未找到对应的REALITY VLESS配置！${PLAIN}"
+            fi
+        elif [[ "$selected_type" == "ss" ]]; then
+            # Shadowsocks节点
+            port=$(jq -r ".inbounds[$selected_index].port" ${CONFIG_FILE})
+            
+            # 判断是单用户还是多用户
+            if jq -e ".inbounds[$selected_index].settings.password" ${CONFIG_FILE} > /dev/null; then
+                # 单用户配置
+                method=$(jq -r ".inbounds[$selected_index].settings.method" ${CONFIG_FILE})
+                password=$(jq -r ".inbounds[$selected_index].settings.password" ${CONFIG_FILE})
+                
+                echo -e "${GREEN}协议: ${PLAIN}Shadowsocks"
+                echo -e "${GREEN}地址: ${PLAIN}$(curl -s https://api.ipify.org)"
+                echo -e "${GREEN}端口: ${PLAIN}${port}"
+                echo -e "${GREEN}密码: ${PLAIN}${password}"
+                echo -e "${GREEN}加密方法: ${PLAIN}${method}"
+                
+                # 生成SS URI
+                ss_uri=$(echo -n "${method}:${password}@$(curl -s https://api.ipify.org):${port}" | base64 -w 0)
+                echo -e "\n${GREEN}SS链接: ${PLAIN}ss://${ss_uri}#SS-${port}-${method}"
+            else
+                # 多用户配置（保留兼容性）
+                echo -e "${YELLOW}这是一个多用户Shadowsocks节点，已不再支持。${PLAIN}"
+                echo -e "${YELLOW}原始配置如下:${PLAIN}"
+                jq ".inbounds[$selected_index]" ${CONFIG_FILE}
+            fi
+        else
+            # 其他节点类型，直接显示完整配置
+            echo -e "${YELLOW}节点原始配置:${PLAIN}"
+            jq ".inbounds[$selected_index]" ${CONFIG_FILE}
+        fi
     else
         echo -e "${RED}配置文件不存在，请先安装xray！${PLAIN}"
     fi
