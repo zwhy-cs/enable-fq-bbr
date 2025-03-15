@@ -82,7 +82,6 @@ install_update_xray() {
     "outbounds": []
 }
 EOF
-
     fi
     
     # 设置权限
