@@ -322,6 +322,78 @@ EOF
     fi
 }
 
+# 添加 Shadowsocks 节点(单用户)
+add_shadowsocks() {
+    echo -e "${GREEN}添加 Shadowsocks 节点...${PLAIN}"
+    
+    # 获取端口
+    read -p "请输入端口号 [默认: 8388]: " port
+    port=${port:-8388}
+    
+    # 生成随机密码
+    default_password=$(openssl rand -base64 12)
+    read -p "请输入用户密码 [默认随机: ${default_password}]: " password
+    password=${password:-$default_password}
+    
+    # 获取加密方法
+    echo "请选择加密方法:"
+    echo "1. aes-128-gcm"
+    echo "2. aes-256-gcm (推荐)"
+    echo "3. chacha20-poly1305"
+    read -p "请选择 [1-3, 默认: 2]: " method_choice
+    
+    case $method_choice in
+        1) method="aes-128-gcm" ;;
+        3) method="chacha20-poly1305" ;;
+        *) method="aes-256-gcm" ;;
+    esac
+    
+    # 更新配置文件
+    if [[ -f ${CONFIG_FILE} ]]; then
+        # 创建 Shadowsocks 配置
+        ss_config=$(cat <<EOF
+{
+  "protocol": "shadowsocks",
+  "port": ${port},
+  "settings": {
+    "method": "${method}",
+    "password": "${password}",
+    "network": "tcp,udp"
+  },
+  "sniffing": {
+    "enabled": true,
+    "destOverride": ["http", "tls"]
+  }
+}
+EOF
+)
+        
+        # 备份配置文件
+        cp ${CONFIG_FILE} ${CONFIG_FILE}.bak
+        
+        # 添加新的入站配置
+        jq --argjson new_inbound "$ss_config" '.inbounds += [$new_inbound]' ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
+        mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
+        
+        # 重启xray服务
+        systemctl restart xray
+        
+        # 显示客户端配置信息
+        echo -e "\n${GREEN}Shadowsocks 节点已添加成功!${PLAIN}"
+        echo -e "${YELLOW}=== 客户端配置信息 ===${PLAIN}"
+        echo -e "${GREEN}服务器地址: $(curl -s https://api.ipify.org)${PLAIN}"
+        echo -e "${GREEN}端口: ${port}${PLAIN}"
+        echo -e "${GREEN}密码: ${password}${PLAIN}"
+        echo -e "${GREEN}加密方法: ${method}${PLAIN}"
+        
+        # 生成SS URI
+        ss_uri=$(echo -n "${method}:${password}@$(curl -s https://api.ipify.org):${port}" | base64 -w 0)
+        echo -e "${GREEN}SS链接: ss://${ss_uri}#SS-${port}-${method}${PLAIN}"
+    else
+        echo -e "${RED}配置文件不存在，请先安装xray！${PLAIN}"
+    fi
+}
+
 # 添加 Shadowsocks 节点
 add_shadowsocks_multi() {
     echo -e "${GREEN}添加多用户 Shadowsocks 节点...${PLAIN}"
@@ -479,7 +551,7 @@ export_config() {
                     echo -e "${GREEN}已导出 REALITY 客户端配置到 ${export_dir}/client_${i}_reality.txt${PLAIN}"
                     
                     # 生成分享链接
-                    share_link="vless://${uuid}@$(curl -s https://api.ipify.org):${port}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${server_name}&fp=chrome&pbk=${public_key}&sid=${short_id}"
+                    share_link="vless://${uuid}@$(curl -s https://api.ipify.org):${port}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${server_name}&fp=chrome&pbk=${public_key}&sid=${short_id}#REALITY-${port}"
                     echo -e "${GREEN}分享链接: ${share_link}${PLAIN}" >> ${export_dir}/client_${i}_reality.txt
                 fi
             elif [[ "$protocol" == "shadowsocks" ]]; then
@@ -541,4 +613,15 @@ show_menu() {
 }
 
 # 执行主函数
-main
+# 主函数
+main() {
+    check_os
+    install_dependencies
+    
+    while true; do
+        show_menu
+        echo ""
+        echo -e "${YELLOW}按任意键继续...${PLAIN}"
+        read -n 1 -s key
+    done
+}
