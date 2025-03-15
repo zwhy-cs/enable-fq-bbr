@@ -74,29 +74,13 @@ install_update_xray() {
     if [[ ! -f ${CONFIG_FILE} ]]; then
         cat > ${CONFIG_FILE} <<-EOF
 {
-  "log": {
-    "loglevel": "warning",
-    "access": "${LOG_DIR}/access.log",
-    "error": "${LOG_DIR}/error.log"
-  },
-  "inbounds": [],
-  "outbounds": [
-    {
-      "protocol": "freedom",
-      "settings": {},
-      "tag": "direct"
-    }
-  ],
-  "routing": {
-    "domainStrategy": "IPOnDemand",
-    "rules": [
-      {
-        "type": "field",
-        "ip": ["geoip:private"],
-        "outboundTag": "direct"
-      }
-    ]
-  }
+    "log": {
+        "loglevel": "warning",
+        "access": "${LOG_DIR}/access.log",
+        "error": "${LOG_DIR}/error.log"
+    },
+    "inbounds": [],
+    "outbounds": []
 }
 EOF
     fi
@@ -171,6 +155,7 @@ check_xray_status() {
 }
 
 # 添加 Reality 节点
+# 添加 Reality 节点
 add_reality() {
     echo -e "${GREEN}添加 REALITY 节点...${PLAIN}"
     
@@ -199,106 +184,115 @@ add_reality() {
     
     # 更新配置文件
     if [[ -f ${CONFIG_FILE} ]]; then
-        # 创建新的配置
-        new_config=$(cat <<EOF
+        # 备份配置文件
+        cp ${CONFIG_FILE} ${CONFIG_FILE}.bak
+        
+        # 创建 dokodemo-door 入站配置
+        dokodemo_config=$(cat <<EOF
 {
-    "log": {
-        "loglevel": "warning",
-        "access": "${LOG_DIR}/access.log",
-        "error": "${LOG_DIR}/error.log"
+    "tag": "dokodemo-in",
+    "port": ${port},
+    "protocol": "dokodemo-door",
+    "settings": {
+        "address": "127.0.0.1",
+        "port": ${internal_port},
+        "network": "tcp"
     },
-    "inbounds": [
-        {
-            "tag": "dokodemo-in",
-            "port": ${port},
-            "protocol": "dokodemo-door",
-            "settings": {
-                "address": "127.0.0.1",
-                "port": ${internal_port},
-                "network": "tcp"
-            },
-            "sniffing": {
-                "enabled": true,
-                "destOverride": [
-                    "tls"
-                ],
-                "routeOnly": true
-            }
-        },
-        {
-            "listen": "127.0.0.1",
-            "port": ${internal_port},
-            "protocol": "vless",
-            "settings": {
-                "clients": [
-                    {
-                        "id": "${uuid}",
-                        "flow": "xtls-rprx-vision"
-                    }
-                ],
-                "decryption": "none"
-            },
-            "streamSettings": {
-                "network": "tcp",
-                "security": "reality",
-                "realitySettings": {
-                    "dest": "${server_name}:443",
-                    "serverNames": [
-                        "${server_name}"
-                    ],
-                    "privateKey": "${private_key}",
-                    "shortIds": ${short_ids_json}
-                }
-            },
-            "sniffing": {
-                "enabled": true,
-                "destOverride": [
-                    "http",
-                    "tls",
-                    "quic"
-                ],
-                "routeOnly": true
-            }
-        }
-    ],
-    "outbounds": [
-        {
-            "protocol": "freedom",
-            "tag": "direct"
-        },
-        {
-            "protocol": "blackhole",
-            "tag": "block"
-        }
-    ],
-    "routing": {
-        "rules": [
-            {
-                "inboundTag": [
-                    "dokodemo-in"
-                ],
-                "domain": [
-                    "${server_name}"
-                ],
-                "outboundTag": "direct"
-            },
-            {
-                "inboundTag": [
-                    "dokodemo-in"
-                ],
-                "outboundTag": "block"
-            }
-        ]
+    "sniffing": {
+        "enabled": true,
+        "destOverride": [
+            "tls"
+        ],
+        "routeOnly": true
     }
 }
 EOF
 )
+
+        # 创建 vless 入站配置
+        vless_config=$(cat <<EOF
+{
+    "listen": "127.0.0.1",
+    "port": ${internal_port},
+    "protocol": "vless",
+    "settings": {
+        "clients": [
+            {
+                "id": "${uuid}",
+                "flow": "xtls-rprx-vision"
+            }
+        ],
+        "decryption": "none"
+    },
+    "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+            "dest": "${server_name}:443",
+            "serverNames": [
+                "${server_name}"
+            ],
+            "privateKey": "${private_key}",
+            "shortIds": ${short_ids_json}
+        }
+    },
+    "sniffing": {
+        "enabled": true,
+        "destOverride": [
+            "http",
+            "tls",
+            "quic"
+        ],
+        "routeOnly": true
+    }
+}
+EOF
+)
+
+        # 添加必要的出站配置
+        outbounds_config=$(cat <<EOF
+[
+    {
+        "protocol": "freedom",
+        "tag": "direct"
+    },
+    {
+        "protocol": "blackhole",
+        "tag": "block"
+    }
+]
+EOF
+)
+
+        # 添加路由规则
+        routing_config=$(cat <<EOF
+{
+    "rules": [
+        {
+            "inboundTag": [
+                "dokodemo-in"
+            ],
+            "domain": [
+                "${server_name}"
+            ],
+            "outboundTag": "direct"
+        },
+        {
+            "inboundTag": [
+                "dokodemo-in"
+            ],
+            "outboundTag": "block"
+        }
+    ]
+}
+EOF
+)
         
-        # 备份配置文件
-        cp ${CONFIG_FILE} ${CONFIG_FILE}.bak
-        
-        # 直接覆盖配置文件
-        echo $new_config > ${CONFIG_FILE}
+        # 添加新的入站配置和出站配置
+        jq --argjson dokodemo "$dokodemo_config" --argjson vless "$vless_config" --argjson outbounds "$outbounds_config" --argjson routing "$routing_config" \
+        '.inbounds = [.inbounds[] | select(.tag != "dokodemo-in")] + [$dokodemo, $vless] | .outbounds = $outbounds | .routing = $routing' \
+        ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
+        mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
         
         # 重启xray服务
         systemctl restart xray
@@ -317,6 +311,10 @@ EOF
         echo -e "${GREEN}PublicKey: ${public_key}${PLAIN}"
         echo -e "${GREEN}ShortID: $(echo $short_ids_json | jq -r '.[1]')${PLAIN}"
         echo -e "${GREEN}请注意：这是使用dokodemo-door代理的安全Reality配置${PLAIN}"
+        
+        # 生成分享链接
+        share_link="vless://${uuid}@$(curl -s https://api.ipify.org):${port}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${server_name}&fp=chrome&pbk=${public_key}&sid=$(echo $short_ids_json | jq -r '.[1]')#REALITY-${port}"
+        echo -e "${GREEN}分享链接: ${share_link}${PLAIN}"
     else
         echo -e "${RED}配置文件不存在，请先安装xray！${PLAIN}"
     fi
@@ -369,7 +367,25 @@ EOF
         
         # 添加新的入站配置
         jq --argjson new_inbound "$ss_config" '.inbounds += [$new_inbound]' ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
-        mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
+        
+        # 确保有必要的出站配置
+        outbounds_config=$(cat <<EOF
+[
+    {
+        "protocol": "freedom",
+        "tag": "direct"
+    },
+    {
+        "protocol": "blackhole",
+        "tag": "block"
+    }
+]
+EOF
+)
+        
+        # 如果没有出站配置，添加默认出站配置
+        jq --argjson outbounds "$outbounds_config" 'if (.outbounds | length) == 0 then .outbounds = $outbounds else . end' ${CONFIG_FILE}.tmp > ${CONFIG_FILE}.tmp2
+        mv ${CONFIG_FILE}.tmp2 ${CONFIG_FILE}
         
         # 重启xray服务
         systemctl restart xray
@@ -390,7 +406,7 @@ EOF
     fi
 }
 
-# 添加 Shadowsocks 节点
+# 添加 Shadowsocks 节点(多用户)
 add_shadowsocks_multi() {
     echo -e "${GREEN}添加多用户 Shadowsocks 节点...${PLAIN}"
     
@@ -457,7 +473,25 @@ EOF
         
         # 添加新的入站配置
         jq --argjson new_inbound "$ss_config" '.inbounds += [$new_inbound]' ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
-        mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
+        
+        # 确保有必要的出站配置
+        outbounds_config=$(cat <<EOF
+[
+    {
+        "protocol": "freedom",
+        "tag": "direct"
+    },
+    {
+        "protocol": "blackhole",
+        "tag": "block"
+    }
+]
+EOF
+)
+        
+        # 如果没有出站配置，添加默认出站配置
+        jq --argjson outbounds "$outbounds_config" 'if (.outbounds | length) == 0 then .outbounds = $outbounds else . end' ${CONFIG_FILE}.tmp > ${CONFIG_FILE}.tmp2
+        mv ${CONFIG_FILE}.tmp2 ${CONFIG_FILE}
         
         # 重启xray服务
         systemctl restart xray
