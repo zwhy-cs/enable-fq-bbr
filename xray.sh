@@ -968,53 +968,35 @@ edit_config() {
     fi
 }
 # 更新当前脚本
+# 更新当前脚本
 update_script() {
     echo -e "${GREEN}开始更新脚本...${PLAIN}"
     
     # 获取当前脚本路径
     SCRIPT_PATH=$(readlink -f "$0")
-    SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
-    SCRIPT_NAME=$(basename "$SCRIPT_PATH")
     
-    # 创建临时目录
-    TMP_DIR=$(mktemp -d)
-    cd "$TMP_DIR" || exit 1
+    # GitHub 上脚本的原始链接
+    GITHUB_RAW_URL="https://raw.githubusercontent.com/username/repo/main/xray.sh"
     
-    # 下载最新版本的脚本
-    echo -e "${YELLOW}正在下载最新版本...${PLAIN}"
+    echo -e "${YELLOW}正在从 GitHub 下载最新版本...${PLAIN}"
     
-    # 这里需要替换为实际的脚本存储库URL
-    # 例如，如果脚本在GitHub上，可以使用raw.githubusercontent.com链接
-    SCRIPT_URL="https://raw.githubusercontent.com/wzxzwhy/enable-fq-bbr/main/xray.sh"
+    # 备份当前脚本
+    BACKUP_PATH="${SCRIPT_PATH}.bak_$(date +%Y%m%d%H%M%S)"
+    cp "$SCRIPT_PATH" "$BACKUP_PATH"
+    echo -e "${YELLOW}已创建备份: ${BACKUP_PATH}${PLAIN}"
     
-    if curl -s -o new_script.sh "$SCRIPT_URL"; then
-        # 比较版本差异
-        if diff -q new_script.sh "$SCRIPT_PATH" &>/dev/null; then
-            echo -e "${GREEN}脚本已是最新版本！${PLAIN}"
-        else
-            # 备份旧脚本
-            cp "$SCRIPT_PATH" "${SCRIPT_PATH}.bak_$(date +%Y%m%d%H%M%S)"
-            echo -e "${YELLOW}已创建备份: ${SCRIPT_PATH}.bak_$(date +%Y%m%d%H%M%S)${PLAIN}"
-            
-            # 替换旧脚本
-            cp new_script.sh "$SCRIPT_PATH"
-            chmod +x "$SCRIPT_PATH"
-            
-            echo -e "${GREEN}脚本已更新成功！${PLAIN}"
-            echo -e "${YELLOW}请重新运行脚本以应用更新。${PLAIN}"
-            
-            # 清理并退出
-            cd - &>/dev/null
-            rm -rf "$TMP_DIR"
-            exit 0
-        fi
+    # 直接下载并替换当前脚本
+    if curl -s -o "$SCRIPT_PATH" "$GITHUB_RAW_URL"; then
+        chmod +x "$SCRIPT_PATH"
+        echo -e "${GREEN}脚本已成功更新！${PLAIN}"
+        echo -e "${YELLOW}请重新执行脚本以应用更新。${PLAIN}"
+        exit 0
     else
-        echo -e "${RED}下载更新失败，请检查网络连接或手动更新脚本。${PLAIN}"
+        echo -e "${RED}下载更新失败，正在恢复备份...${PLAIN}"
+        cp "$BACKUP_PATH" "$SCRIPT_PATH"
+        chmod +x "$SCRIPT_PATH"
+        echo -e "${GREEN}已恢复到备份版本。${PLAIN}"
     fi
-    
-    # 清理临时文件
-    cd - &>/dev/null
-    rm -rf "$TMP_DIR"
 }
 # 显示菜单
 # 显示菜单
