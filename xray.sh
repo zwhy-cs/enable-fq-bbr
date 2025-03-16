@@ -967,6 +967,56 @@ edit_config() {
         echo -e "${RED}配置文件不存在，请先安装xray！${PLAIN}"
     fi
 }
+# 更新当前脚本
+update_script() {
+    echo -e "${GREEN}开始更新脚本...${PLAIN}"
+    
+    # 获取当前脚本路径
+    SCRIPT_PATH=$(readlink -f "$0")
+    SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
+    SCRIPT_NAME=$(basename "$SCRIPT_PATH")
+    
+    # 创建临时目录
+    TMP_DIR=$(mktemp -d)
+    cd "$TMP_DIR" || exit 1
+    
+    # 下载最新版本的脚本
+    echo -e "${YELLOW}正在下载最新版本...${PLAIN}"
+    
+    # 这里需要替换为实际的脚本存储库URL
+    # 例如，如果脚本在GitHub上，可以使用raw.githubusercontent.com链接
+    SCRIPT_URL="https://raw.githubusercontent.com/wzxzwhy/enable-fq-bbr/main/xray.sh"
+    
+    if curl -s -o new_script.sh "$SCRIPT_URL"; then
+        # 比较版本差异
+        if diff -q new_script.sh "$SCRIPT_PATH" &>/dev/null; then
+            echo -e "${GREEN}脚本已是最新版本！${PLAIN}"
+        else
+            # 备份旧脚本
+            cp "$SCRIPT_PATH" "${SCRIPT_PATH}.bak_$(date +%Y%m%d%H%M%S)"
+            echo -e "${YELLOW}已创建备份: ${SCRIPT_PATH}.bak_$(date +%Y%m%d%H%M%S)${PLAIN}"
+            
+            # 替换旧脚本
+            cp new_script.sh "$SCRIPT_PATH"
+            chmod +x "$SCRIPT_PATH"
+            
+            echo -e "${GREEN}脚本已更新成功！${PLAIN}"
+            echo -e "${YELLOW}请重新运行脚本以应用更新。${PLAIN}"
+            
+            # 清理并退出
+            cd - &>/dev/null
+            rm -rf "$TMP_DIR"
+            exit 0
+        fi
+    else
+        echo -e "${RED}下载更新失败，请检查网络连接或手动更新脚本。${PLAIN}"
+    fi
+    
+    # 清理临时文件
+    cd - &>/dev/null
+    rm -rf "$TMP_DIR"
+}
+# 显示菜单
 # 显示菜单
 # 显示菜单
 show_menu() {
@@ -988,9 +1038,10 @@ show_menu() {
   ${GREEN}9.${PLAIN} 查看当前 Xray 配置
   ${GREEN}10.${PLAIN} 修改 Xray 配置文件
   ${GREEN}————————————————— 其他选项 —————————————————${PLAIN}
+  ${GREEN}11.${PLAIN} 更新当前脚本
   ${GREEN}0.${PLAIN} 退出脚本
     "
-    echo && read -p "请输入选择 [0-10]: " num
+    echo && read -p "请输入选择 [0-11]: " num
     
     case "${num}" in
         0) exit 0 ;;
@@ -1004,7 +1055,8 @@ show_menu() {
         8) view_log ;;
         9) view_config ;;
         10) edit_config ;;
-        *) echo -e "${RED}请输入正确的数字 [0-10]${PLAIN}" ;;
+        11) update_script ;;
+        *) echo -e "${RED}请输入正确的数字 [0-11]${PLAIN}" ;;
     esac
 }
 # 执行主函数
