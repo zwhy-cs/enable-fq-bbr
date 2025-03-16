@@ -902,6 +902,72 @@ view_config() {
         echo -e "${RED}配置文件不存在，请先安装xray！${PLAIN}"
     fi
 }
+# 使用nano编辑器修改xray配置文件
+edit_config() {
+    echo -e "${GREEN}使用nano编辑器修改Xray配置文件...${PLAIN}"
+    
+    if [[ -f ${CONFIG_FILE} ]]; then
+        # 检查nano是否安装
+        if ! command -v nano &> /dev/null; then
+            echo -e "${YELLOW}nano编辑器未安装，正在安装...${PLAIN}"
+            if [[ $release = "centos" ]]; then
+                yum install -y nano
+            else
+                apt update -y && apt install -y nano
+            fi
+        fi
+        
+        # 创建配置文件备份
+        cp ${CONFIG_FILE} ${CONFIG_FILE}.bak_$(date +%Y%m%d%H%M%S)
+        echo -e "${YELLOW}已创建配置文件备份: ${CONFIG_FILE}.bak_$(date +%Y%m%d%H%M%S)${PLAIN}"
+        
+        # 使用nano编辑配置文件
+        echo -e "${YELLOW}按任意键开始编辑配置文件...${PLAIN}"
+        read -n 1 -s
+        nano ${CONFIG_FILE}
+        
+        # 检查配置文件是否有效的JSON
+        if jq empty ${CONFIG_FILE} 2>/dev/null; then
+            echo -e "${GREEN}配置文件验证成功！${PLAIN}"
+            echo -e "${YELLOW}是否重启Xray服务应用修改？[y/n]: ${PLAIN}"
+            read restart_service
+            
+            if [[ "$restart_service" == "y" || "$restart_service" == "Y" ]]; then
+                echo -e "${GREEN}正在重启Xray服务...${PLAIN}"
+                systemctl restart xray
+                if systemctl is-active --quiet xray; then
+                    echo -e "${GREEN}Xray服务已成功重启！${PLAIN}"
+                else
+                    echo -e "${RED}Xray服务重启失败，请检查配置是否正确！${PLAIN}"
+                    echo -e "${YELLOW}是否恢复之前的备份？[y/n]: ${PLAIN}"
+                    read restore_backup
+                    
+                    if [[ "$restore_backup" == "y" || "$restore_backup" == "Y" ]]; then
+                        cp ${CONFIG_FILE}.bak_$(date +%Y%m%d%H%M%S) ${CONFIG_FILE}
+                        systemctl restart xray
+                        echo -e "${GREEN}已恢复配置文件并重启服务！${PLAIN}"
+                    fi
+                fi
+            else
+                echo -e "${YELLOW}配置已修改但未重启服务，修改尚未生效。${PLAIN}"
+            fi
+        else
+            echo -e "${RED}配置文件JSON格式无效！${PLAIN}"
+            echo -e "${YELLOW}是否恢复之前的备份？[y/n]: ${PLAIN}"
+            read restore_backup
+            
+            if [[ "$restore_backup" == "y" || "$restore_backup" == "Y" ]]; then
+                cp ${CONFIG_FILE}.bak_$(date +%Y%m%d%H%M%S) ${CONFIG_FILE}
+                echo -e "${GREEN}已恢复配置文件！${PLAIN}"
+            else
+                echo -e "${RED}请手动修复配置文件，否则Xray可能无法正常启动！${PLAIN}"
+            fi
+        fi
+    else
+        echo -e "${RED}配置文件不存在，请先安装xray！${PLAIN}"
+    fi
+}
+# 显示菜单
 # 显示菜单
 show_menu() {
     clear
@@ -920,10 +986,11 @@ show_menu() {
   ${GREEN}7.${PLAIN} 删除节点
   ${GREEN}8.${PLAIN} 查看 Xray 日志
   ${GREEN}9.${PLAIN} 查看当前 Xray 配置
+  ${GREEN}10.${PLAIN} 修改 Xray 配置文件
   ${GREEN}————————————————— 其他选项 —————————————————${PLAIN}
   ${GREEN}0.${PLAIN} 退出脚本
     "
-    echo && read -p "请输入选择 [0-9]: " num
+    echo && read -p "请输入选择 [0-10]: " num
     
     case "${num}" in
         0) exit 0 ;;
@@ -936,10 +1003,10 @@ show_menu() {
         7) delete_node ;;
         8) view_log ;;
         9) view_config ;;
-        *) echo -e "${RED}请输入正确的数字 [0-9]${PLAIN}" ;;
+        10) edit_config ;;
+        *) echo -e "${RED}请输入正确的数字 [0-10]${PLAIN}" ;;
     esac
 }
-
 # 执行主函数
 # 主函数
 main() {
