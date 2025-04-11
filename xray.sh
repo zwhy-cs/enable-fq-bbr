@@ -153,7 +153,6 @@ check_xray_status() {
 }
 
 # 添加 Reality 节点
-# 添加 Reality 节点
 add_reality() {
     echo -e "${GREEN}添加 REALITY 节点...${PLAIN}"
     
@@ -319,6 +318,230 @@ EOF
     fi
 }
 
+# 添加多个 Reality 节点
+add_multiple_reality() {
+    echo -e "${GREEN}添加多个 REALITY 节点...${PLAIN}"
+    
+    # 询问用户想要创建的节点数量
+    read -p "请输入要创建的 REALITY 节点数量: " node_count
+    
+    # 验证输入是否为数字
+    if [[ ! "$node_count" =~ ^[0-9]+$ ]]; then
+        echo -e "${RED}输入无效！请输入有效的数字。${PLAIN}"
+        return
+    fi
+    
+    # 如果输入的是0或负数，退出函数
+    if [[ $node_count -le 0 ]]; then
+        echo -e "${RED}节点数必须大于0！${PLAIN}"
+        return
+    fi
+    
+    # 创建每个节点
+    for ((i=1; i<=$node_count; i++)); do
+        echo -e "\n${YELLOW}====== 创建第 $i 个 REALITY 节点 ======${PLAIN}"
+        
+        # 生成UUID
+        uuid=$(xray uuid)
+        echo -e "${GREEN}已生成UUID: ${uuid}${PLAIN}"
+        
+        # 生成 REALITY 密钥对
+        key_pair=$(xray x25519)
+        private_key=$(echo "$key_pair" | grep "Private" | awk '{print $3}')
+        public_key=$(echo "$key_pair" | grep "Public" | awk '{print $3}')
+        
+        # 获取端口 (对外端口)
+        read -p "请输入第 $i 个节点的外部端口号 [默认: $((443 + $i - 1))]: " port
+        port=${port:-$((443 + $i - 1))}
+        
+        # 内部端口，为避免冲突，每个节点递增
+        internal_port=$((4431 + $i - 1))
+        
+        # 获取服务器名称
+        read -p "请输入第 $i 个节点的服务器名称(SNI) [例如: speed.cloudflare.com]: " server_name
+        server_name=${server_name:-speed.cloudflare.com}
+        
+        # 获取短ID
+        short_ids_json=$(jq -n --arg id1 "" --arg id2 "$(openssl rand -hex 8)" '[$id1, $id2]')
+        
+        # 更新配置文件
+        if [[ -f ${CONFIG_FILE} ]]; then
+            # 备份配置文件
+            if [[ $i -eq 1 ]]; then
+                cp ${CONFIG_FILE} ${CONFIG_FILE}.bak
+            fi
+            
+            # 创建 dokodemo-door 入站配置
+            dokodemo_config=$(cat <<EOF
+{
+    "tag": "dokodemo-in-${port}",
+    "port": ${port},
+    "protocol": "dokodemo-door",
+    "settings": {
+        "address": "127.0.0.1",
+        "port": ${internal_port},
+        "network": "tcp"
+    },
+    "sniffing": {
+        "enabled": true,
+        "destOverride": [
+            "tls"
+        ],
+        "routeOnly": true
+    }
+}
+EOF
+)
+
+            # 创建 vless 入站配置
+            vless_config=$(cat <<EOF
+{
+    "listen": "127.0.0.1",
+    "port": ${internal_port},
+    "protocol": "vless",
+    "settings": {
+        "clients": [
+            {
+                "id": "${uuid}",
+                "flow": "xtls-rprx-vision"
+            }
+        ],
+        "decryption": "none"
+    },
+    "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+            "dest": "${server_name}:443",
+            "serverNames": [
+                "${server_name}"
+            ],
+            "privateKey": "${private_key}",
+            "shortIds": ${short_ids_json},
+            "publicKey": "${public_key}"
+        }
+    },
+    "sniffing": {
+        "enabled": true,
+        "destOverride": [
+            "http",
+            "tls",
+            "quic"
+        ],
+        "routeOnly": true
+    }
+}
+EOF
+)
+
+            # 添加路由规则
+            routing_rule_domain=$(cat <<EOF
+{
+    "inboundTag": [
+        "dokodemo-in-${port}"
+    ],
+    "domain": [
+        "${server_name}"
+    ],
+    "outboundTag": "direct"
+}
+EOF
+)
+
+            routing_rule_block=$(cat <<EOF
+{
+    "inboundTag": [
+        "dokodemo-in-${port}"
+    ],
+    "outboundTag": "block"
+}
+EOF
+)
+            
+            # 检查是否需要添加必要的出站配置
+            outbounds_count=$(jq '.outbounds | length' ${CONFIG_FILE})
+            if [ "$outbounds_count" -eq 0 ]; then
+                # 添加必要的出站配置
+                outbounds_config=$(cat <<EOF
+[
+    {
+        "protocol": "freedom",
+        "tag": "direct"
+    },
+    {
+        "protocol": "blackhole",
+        "tag": "block"
+    }
+]
+EOF
+)
+                # 添加出站配置
+                jq --argjson outbounds "$outbounds_config" '.outbounds = $outbounds' ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
+                mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
+            fi
+            
+            # 添加入站配置
+            jq --argjson dokodemo "$dokodemo_config" --argjson vless "$vless_config" \
+            '.inbounds += [$dokodemo, $vless]' ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
+            mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
+            
+            # 添加路由规则
+            if jq -e '.routing' ${CONFIG_FILE} > /dev/null; then
+                # 检查是否已存在路由规则
+                if jq -e '.routing.rules' ${CONFIG_FILE} > /dev/null; then
+                    jq --argjson rule_domain "$routing_rule_domain" --argjson rule_block "$routing_rule_block" \
+                    '.routing.rules += [$rule_domain, $rule_block]' ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
+                    mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
+                else
+                    jq --argjson rule_domain "$routing_rule_domain" --argjson rule_block "$routing_rule_block" \
+                    '.routing.rules = [$rule_domain, $rule_block]' ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
+                    mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
+                fi
+            else
+                # 需要创建完整的路由配置
+                routing_config=$(cat <<EOF
+{
+    "rules": [
+        ${routing_rule_domain},
+        ${routing_rule_block}
+    ]
+}
+EOF
+)
+                jq --argjson routing "$routing_config" '.routing = $routing' ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
+                mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
+            fi
+            
+            # 显示客户端配置信息
+            echo -e "\n${GREEN}第 $i 个 REALITY 节点已添加成功!${PLAIN}"
+            echo -e "${YELLOW}=== 客户端配置信息 ===${PLAIN}"
+            echo -e "${GREEN}协议: VLESS${PLAIN}"
+            echo -e "${GREEN}地址: $(curl -s https://api.ipify.org)${PLAIN}"
+            echo -e "${GREEN}端口: ${port}${PLAIN}"
+            echo -e "${GREEN}UUID: ${uuid}${PLAIN}"
+            echo -e "${GREEN}流控: xtls-rprx-vision${PLAIN}"
+            echo -e "${GREEN}传输协议: tcp${PLAIN}"
+            echo -e "${GREEN}安全层: reality${PLAIN}"
+            echo -e "${GREEN}SNI: ${server_name}${PLAIN}"
+            echo -e "${GREEN}PublicKey: ${public_key}${PLAIN}"
+            echo -e "${GREEN}ShortID: $(echo $short_ids_json | jq -r '.[1]')${PLAIN}"
+            
+            # 生成分享链接
+            share_link="vless://${uuid}@$(curl -s https://api.ipify.org):${port}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${server_name}&fp=chrome&pbk=${public_key}&sid=$(echo $short_ids_json | jq -r '.[1]')#REALITY-${port}"
+            echo -e "${GREEN}分享链接: ${share_link}${PLAIN}"
+        else
+            echo -e "${RED}配置文件不存在，请先安装xray！${PLAIN}"
+            return
+        fi
+    done
+    
+    # 重启xray服务应用所有更改
+    echo -e "\n${GREEN}正在重启 Xray 服务应用所有更改...${PLAIN}"
+    systemctl restart xray
+    
+    echo -e "${GREEN}所有 REALITY 节点已成功添加并应用！${PLAIN}"
+}
+
 # 添加 Shadowsocks 节点(单用户)
 add_shadowsocks() {
     echo -e "${GREEN}添加 Shadowsocks 节点...${PLAIN}"
@@ -405,9 +628,6 @@ EOF
     fi
 }
 
-
-# 导出现有配置
-# 导出现有配置
 # 导出现有配置
 export_config() {
     echo -e "${GREEN}导出现有节点配置...${PLAIN}"
@@ -567,7 +787,7 @@ export_config() {
         echo -e "${RED}配置文件不存在，请先安装xray！${PLAIN}"
     fi
 }
-# 删除节点
+
 # 删除节点
 delete_node() {
     echo -e "${GREEN}删除节点...${PLAIN}"
@@ -594,7 +814,7 @@ delete_node() {
             tag=$(jq -r ".inbounds[$i].tag // \"未命名\"" ${CONFIG_FILE})
             
             # 检查是否是dokodemo-door且是REALITY配置的一部分
-            if [[ "$protocol" == "dokodemo-door" && "$tag" == "dokodemo-in" ]]; then
+            if [[ "$protocol" == "dokodemo-door" && ("$tag" == "dokodemo-in" || "$tag" =~ ^dokodemo-in-[0-9]+$) ]]; then
                 # 查找关联的vless入站
                 internal_port=$(jq -r ".inbounds[$i].settings.port" ${CONFIG_FILE})
                 for ((j=0; j<${inbound_count}; j++)); do
@@ -610,7 +830,8 @@ delete_node() {
                                 # 找到REALITY配对
                                 node_list+=($i)
                                 is_reality_pair+=("true")
-                                reality_primary_index+=($i)
+                                # 保存vless索引，以便后续删除时使用
+                                reality_primary_index+=($j)
                                 node_description+=("REALITY节点 [dokodemo-door端口:${port} + vless端口:${internal_port}]")
                                 break
                             fi
@@ -654,61 +875,45 @@ delete_node() {
             
             # 找到dokodemo-door和对应的vless入站
             dokodemo_index=$actual_index
+            vless_index=${reality_primary_index[$delete_index]}
+            
+            # 获取节点的tag来删除相应的路由规则
+            dokodemo_tag=$(jq -r ".inbounds[$dokodemo_index].tag" ${CONFIG_FILE})
             internal_port=$(jq -r ".inbounds[$dokodemo_index].settings.port" ${CONFIG_FILE})
-            vless_index=-1
             
-            # 查找对应的vless入站
-            for ((i=0; i<${inbound_count}; i++)); do
-                protocol=$(jq -r ".inbounds[$i].protocol" ${CONFIG_FILE})
-                port=$(jq -r ".inbounds[$i].port" ${CONFIG_FILE})
-                listen=$(jq -r ".inbounds[$i].listen // \"0.0.0.0\"" ${CONFIG_FILE})
-                
-                if [[ "$protocol" == "vless" && "$port" == "$internal_port" && "$listen" == "127.0.0.1" ]]; then
-                    security=$(jq -r ".inbounds[$i].streamSettings.security // \"none\"" ${CONFIG_FILE})
-                    if [[ "$security" == "reality" ]]; then
-                        vless_index=$i
-                        break
-                    fi
-                fi
-            done
+            # 获取删除前的配置内容，以创建临时配置
+            temp_config=$(cat ${CONFIG_FILE})
             
-            if [[ $vless_index -ne -1 ]]; then
-                # 删除dokodemo-door和vless入站
-                # 获取删除前的配置内容
-                temp_config=$(cat ${CONFIG_FILE})
-                
-                # 删除对应的路由规则
-                server_name=$(jq -r ".inbounds[$vless_index].streamSettings.realitySettings.serverNames[0]" <<< "$temp_config")
-                
-                temp_config=$(jq "del(.routing.rules[] | select(.domain != null and .domain[0] == \"${server_name}\"))" <<< "$temp_config")
-                temp_config=$(jq "del(.routing.rules[] | select(.inboundTag != null and .inboundTag[0] == \"dokodemo-in\"))" <<< "$temp_config")
-                
-                # 如果要删除的vless_index小于dokodemo_index，先删除vless_index
-                if [[ $vless_index -lt $dokodemo_index ]]; then
-                    temp_config=$(jq "del(.inbounds[$vless_index])" <<< "$temp_config")
-                    # dokodemo_index索引需要减1
-                    dokodemo_index=$((dokodemo_index-1))
-                    temp_config=$(jq "del(.inbounds[$dokodemo_index])" <<< "$temp_config")
-                else
-                    temp_config=$(jq "del(.inbounds[$dokodemo_index])" <<< "$temp_config")
-                    # vless_index索引需要减1
-                    vless_index=$((vless_index-1))
-                    temp_config=$(jq "del(.inbounds[$vless_index])" <<< "$temp_config")
-                fi
-                
-                echo "$temp_config" > ${CONFIG_FILE}
-                
-                echo -e "${GREEN}已删除REALITY节点配对 (dokodemo-door和vless入站)以及相关路由规则！${PLAIN}"
+            # 删除对应的路由规则 - 使用更精确的匹配
+            server_name=$(jq -r ".inbounds[$vless_index].streamSettings.realitySettings.serverNames[0]" <<< "$temp_config")
+            
+            # 先删除与该节点相关的路由规则
+            temp_config=$(jq "del(.routing.rules[] | select(.inboundTag != null and .inboundTag[0] == \"$dokodemo_tag\"))" <<< "$temp_config")
+            
+            # 删除入站配置 - 处理索引变化的情况
+            if [[ $vless_index -lt $dokodemo_index ]]; then
+                # 如果vless入站的索引小于dokodemo入站，先删除vless入站
+                echo -e "${GREEN}删除vless配置 (索引: $vless_index)...${PLAIN}"
+                temp_config=$(jq "del(.inbounds[$vless_index])" <<< "$temp_config")
+                # dokodemo_index索引需要减1，因为前面已经删掉了一项
+                dokodemo_index=$((dokodemo_index-1))
+                echo -e "${GREEN}删除dokodemo配置 (调整后索引: $dokodemo_index)...${PLAIN}"
+                temp_config=$(jq "del(.inbounds[$dokodemo_index])" <<< "$temp_config")
             else
-                echo -e "${RED}未找到对应的REALITY vless入站配置，只删除dokodemo-door入站！${PLAIN}"
-                jq "del(.inbounds[$dokodemo_index])" ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
-                mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
-                
-                # 删除对应的路由规则
-                jq "del(.routing.rules[] | select(.inboundTag != null and .inboundTag[0] == \"dokodemo-in\"))" ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
-                mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
+                # 否则先删除dokodemo入站
+                echo -e "${GREEN}删除dokodemo配置 (索引: $dokodemo_index)...${PLAIN}"
+                temp_config=$(jq "del(.inbounds[$dokodemo_index])" <<< "$temp_config")
+                # vless_index索引需要减1，因为前面已经删掉了一项
+                vless_index=$((vless_index-1))
+                echo -e "${GREEN}删除vless配置 (调整后索引: $vless_index)...${PLAIN}"
+                temp_config=$(jq "del(.inbounds[$vless_index])" <<< "$temp_config")
             fi
-        else {
+            
+            # 将修改后的配置写回文件
+            echo "$temp_config" > ${CONFIG_FILE}
+            
+            echo -e "${GREEN}已成功删除REALITY节点配对 (dokodemo-door和vless入站)以及相关路由规则！${PLAIN}"
+        } else {
             # 普通节点直接删除
             echo -e "${YELLOW}正在删除${node_description[$delete_index]}...${PLAIN}"
             jq "del(.inbounds[${actual_index}])" ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
@@ -719,10 +924,12 @@ delete_node() {
         
         # 重启xray服务
         systemctl restart xray
+        echo -e "${GREEN}已重启Xray服务，更改已生效。${PLAIN}"
     else
         echo -e "${RED}配置文件不存在，请先安装xray！${PLAIN}"
     fi
 }
+
 # 查看 Xray 日志
 view_log() {
     echo -e "${GREEN}查看 Xray 日志...${PLAIN}"
@@ -754,6 +961,7 @@ view_log() {
             ;;
     esac
 }
+
 # 查看当前Xray配置
 view_config() {
     echo -e "${GREEN}查看当前Xray配置...${PLAIN}"
@@ -902,6 +1110,7 @@ view_config() {
         echo -e "${RED}配置文件不存在，请先安装xray！${PLAIN}"
     fi
 }
+
 # 使用nano编辑器修改xray配置文件
 edit_config() {
     echo -e "${GREEN}使用nano编辑器修改Xray配置文件...${PLAIN}"
@@ -967,7 +1176,7 @@ edit_config() {
         echo -e "${RED}配置文件不存在，请先安装xray！${PLAIN}"
     fi
 }
-# 更新当前脚本
+
 # 更新当前脚本
 update_script() {
     echo -e "${GREEN}开始更新脚本...${PLAIN}"
@@ -998,8 +1207,7 @@ update_script() {
         echo -e "${GREEN}已恢复到备份版本。${PLAIN}"
     fi
 }
-# 显示菜单
-# 显示菜单
+
 # 显示菜单
 show_menu() {
     clear
@@ -1019,11 +1227,12 @@ show_menu() {
   ${GREEN}8.${PLAIN} 查看 Xray 日志
   ${GREEN}9.${PLAIN} 查看当前 Xray 配置
   ${GREEN}10.${PLAIN} 修改 Xray 配置文件
+  ${GREEN}11.${PLAIN} 添加多个 REALITY 节点
   ${GREEN}————————————————— 其他选项 —————————————————${PLAIN}
-  ${GREEN}11.${PLAIN} 更新当前脚本
+  ${GREEN}12.${PLAIN} 更新当前脚本
   ${GREEN}0.${PLAIN} 退出脚本
     "
-    echo && read -p "请输入选择 [0-11]: " num
+    echo && read -p "请输入选择 [0-12]: " num
     
     case "${num}" in
         0) exit 0 ;;
@@ -1037,12 +1246,13 @@ show_menu() {
         8) view_log ;;
         9) view_config ;;
         10) edit_config ;;
-        11) update_script ;;
-        *) echo -e "${RED}请输入正确的数字 [0-11]${PLAIN}" ;;
+        11) add_multiple_reality ;;
+        12) update_script ;;
+        *) echo -e "${RED}请输入正确的数字 [0-12]${PLAIN}" ;;
     esac
 }
+
 # 执行主函数
-# 主函数
 main() {
     check_os
     install_dependencies
