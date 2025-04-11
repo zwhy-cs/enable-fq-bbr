@@ -1219,35 +1219,33 @@ show_menu() {
   ${GREEN}2.${PLAIN} 安装/更新 Xray
   ${GREEN}3.${PLAIN} 卸载 Xray
   ${GREEN}————————————————— 节点管理 —————————————————${PLAIN}
-  ${GREEN}4.${PLAIN} 添加 REALITY 节点
+  ${GREEN}4.${PLAIN} 添加多个 REALITY 节点
   ${GREEN}5.${PLAIN} 添加 Shadowsocks 节点(单用户)
   ${GREEN}6.${PLAIN} 导出现有节点配置
   ${GREEN}7.${PLAIN} 删除节点
   ${GREEN}8.${PLAIN} 查看 Xray 日志
   ${GREEN}9.${PLAIN} 查看当前 Xray 配置
   ${GREEN}10.${PLAIN} 修改 Xray 配置文件
-  ${GREEN}11.${PLAIN} 添加多个 REALITY 节点
   ${GREEN}————————————————— 其他选项 —————————————————${PLAIN}
-  ${GREEN}12.${PLAIN} 更新当前脚本
+  ${GREEN}11.${PLAIN} 更新当前脚本
   ${GREEN}0.${PLAIN} 退出脚本
     "
-    echo && read -p "请输入选择 [0-12]: " num
+    echo && read -p "请输入选择 [0-11]: " num
     
     case "${num}" in
         0) exit 0 ;;
         1) check_xray_status ;;
         2) install_update_xray ;;
         3) uninstall_xray ;;
-        4) add_reality ;;
+        4) add_multiple_reality ;;
         5) add_shadowsocks ;;
         6) export_config ;;
         7) delete_node ;;
         8) view_log ;;
         9) view_config ;;
         10) edit_config ;;
-        11) add_multiple_reality ;;
-        12) update_script ;;
-        *) echo -e "${RED}请输入正确的数字 [0-12]${PLAIN}" ;;
+        11) update_script ;;
+        *) echo -e "${RED}请输入正确的数字 [0-11]${PLAIN}" ;;
     esac
 }
 
