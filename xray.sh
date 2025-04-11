@@ -320,10 +320,11 @@ EOF
 
 # 添加多个 Reality 节点
 add_multiple_reality() {
-    echo -e "${GREEN}添加多个 REALITY 节点...${PLAIN}"
+    echo -e "${GREEN}添加 REALITY 节点...${PLAIN}"
     
     # 询问用户想要创建的节点数量
-    read -p "请输入要创建的 REALITY 节点数量: " node_count
+    read -p "请输入要创建的 REALITY 节点数量 [默认: 1]: " node_count
+    node_count=${node_count:-1}
     
     # 验证输入是否为数字
     if [[ ! "$node_count" =~ ^[0-9]+$ ]]; then
@@ -336,6 +337,25 @@ add_multiple_reality() {
         echo -e "${RED}节点数必须大于0！${PLAIN}"
         return
     fi
+    
+    # 检查现有配置，找出已经使用的内部端口
+    declare -a used_internal_ports
+    if [[ -f ${CONFIG_FILE} ]]; then
+        inbound_count=$(jq '.inbounds | length' ${CONFIG_FILE})
+        for ((i=0; i<${inbound_count}; i++)); do
+            protocol=$(jq -r ".inbounds[$i].protocol" ${CONFIG_FILE})
+            listen=$(jq -r ".inbounds[$i].listen // \"0.0.0.0\"" ${CONFIG_FILE})
+            
+            if [[ "$protocol" == "vless" && "$listen" == "127.0.0.1" ]]; then
+                # 这是REALITY内部端口
+                inner_port=$(jq -r ".inbounds[$i].port" ${CONFIG_FILE})
+                used_internal_ports+=($inner_port)
+            fi
+        done
+    fi
+    
+    # 找到可用的起始内部端口（默认从4431开始）
+    start_internal_port=4431
     
     # 创建每个节点
     for ((i=1; i<=$node_count; i++)); do
@@ -354,8 +374,14 @@ add_multiple_reality() {
         read -p "请输入第 $i 个节点的外部端口号 [默认: $((443 + $i - 1))]: " port
         port=${port:-$((443 + $i - 1))}
         
-        # 内部端口，为避免冲突，每个节点递增
-        internal_port=$((4431 + $i - 1))
+        # 查找未被使用的内部端口
+        internal_port=$start_internal_port
+        while [[ " ${used_internal_ports[@]} " =~ " ${internal_port} " ]]; do
+            internal_port=$((internal_port+1))
+        done
+        used_internal_ports+=($internal_port)
+        
+        echo -e "${GREEN}为该节点分配内部端口: ${internal_port}${PLAIN}"
         
         # 获取服务器名称
         read -p "请输入第 $i 个节点的服务器名称(SNI) [例如: speed.cloudflare.com]: " server_name
