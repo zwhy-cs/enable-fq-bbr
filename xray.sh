@@ -1251,8 +1251,21 @@ show_menu() {
 
 # 执行主函数
 main() {
-    check_os
-    install_dependencies
+    # 检查标记文件是否存在
+    INIT_MARK_FILE="/usr/local/etc/xray/.init_completed"
+    
+    # 如果标记文件不存在，则执行初始化操作
+    if [ ! -f ${INIT_MARK_FILE} ]; then
+        echo -e "${GREEN}首次运行，正在进行系统检查和依赖安装...${PLAIN}"
+        check_os
+        install_dependencies
+        
+        # 创建标记文件
+        mkdir -p $(dirname ${INIT_MARK_FILE})
+        touch ${INIT_MARK_FILE}
+        echo "$(date)" > ${INIT_MARK_FILE}
+        echo -e "${GREEN}初始化完成！${PLAIN}"
+    fi
     
     while true; do
         show_menu
