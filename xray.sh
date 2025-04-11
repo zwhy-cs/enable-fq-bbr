@@ -655,8 +655,8 @@ export_config() {
             
             if [[ "$protocol" == "dokodemo-door" ]]; then
                 tag=$(jq -r ".inbounds[$i].tag // \"\"" ${CONFIG_FILE})
-                if [[ "$tag" == "dokodemo-in" ]]; then
-                    # REALITY节点的外部入口
+                if [[ "$tag" == "dokodemo-in" || "$tag" =~ ^dokodemo-in-[0-9]+$ ]]; then
+                    # REALITY节点的外部入口（支持单个和批量创建的节点）
                     internal_port=$(jq -r ".inbounds[$i].settings.port" ${CONFIG_FILE})
                     node_list+=($i)
                     node_type+=("reality")
@@ -913,13 +913,12 @@ delete_node() {
             echo "$temp_config" > ${CONFIG_FILE}
             
             echo -e "${GREEN}已成功删除REALITY节点配对 (dokodemo-door和vless入站)以及相关路由规则！${PLAIN}"
-        } else {
+        else
             # 普通节点直接删除
             echo -e "${YELLOW}正在删除${node_description[$delete_index]}...${PLAIN}"
             jq "del(.inbounds[${actual_index}])" ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
             mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
             echo -e "${GREEN}节点已成功删除！${PLAIN}"
-        }
         fi
         
         # 重启xray服务
@@ -1005,8 +1004,8 @@ view_config() {
             tag=$(jq -r ".inbounds[$i].tag // \"未命名\"" ${CONFIG_FILE})
             listen=$(jq -r ".inbounds[$i].listen // \"0.0.0.0\"" ${CONFIG_FILE})
             
-            # 检查是否是REALITY配对的一部分
-            if [[ "$protocol" == "dokodemo-door" && "$tag" == "dokodemo-in" ]]; then
+            # 检查是否是REALITY配对的一部分（支持单个和批量创建的节点）
+            if [[ "$protocol" == "dokodemo-door" && ("$tag" == "dokodemo-in" || "$tag" =~ ^dokodemo-in-[0-9]+$) ]]; then
                 # 找到关联的vless配置
                 internal_port=$(jq -r ".inbounds[$i].settings.port" ${CONFIG_FILE})
                 for ((j=0; j<${inbound_count}; j++)); do
@@ -1185,7 +1184,7 @@ update_script() {
     SCRIPT_PATH=$(readlink -f "$0")
     
     # GitHub 上脚本的原始链接
-    GITHUB_RAW_URL="https://raw.githubusercontent.com/username/repo/main/xray.sh"
+    GITHUB_RAW_URL="https://raw.githubusercontent.com/wzxzwhy/enable-fq-bbr/main/xray.sh"
     
     echo -e "${YELLOW}正在从 GitHub 下载最新版本...${PLAIN}"
     
