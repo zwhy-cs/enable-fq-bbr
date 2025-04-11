@@ -577,7 +577,7 @@ add_shadowsocks() {
     port=${port:-8388}
     
     # 生成随机密码
-    default_password=$(openssl rand -base64 12)
+    default_password=$(openssl rand -base64 16)
     read -p "请输入用户密码 [默认随机: ${default_password}]: " password
     password=${password:-$default_password}
     
@@ -586,11 +586,13 @@ add_shadowsocks() {
     echo "1. aes-128-gcm"
     echo "2. aes-256-gcm (推荐)"
     echo "3. chacha20-poly1305"
+    echo "4. 2022-blake3-aes-128-gcm"
     read -p "请选择 [1-3, 默认: 2]: " method_choice
     
     case $method_choice in
         1) method="aes-128-gcm" ;;
         3) method="chacha20-poly1305" ;;
+        4) method="2022-blake3-aes-128-gcm" ;;
         *) method="aes-256-gcm" ;;
     esac
     
