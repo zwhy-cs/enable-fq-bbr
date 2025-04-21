@@ -650,9 +650,18 @@ EOF
         echo -e "${GREEN}密码: ${password}${PLAIN}"
         echo -e "${GREEN}加密方法: ${method}${PLAIN}"
         
+        # 新增：询问用户输入IP和端口
+        read -p "请输入要生成SS链接的服务器IP [默认: $(curl -s https://api.ipify.org)]: " custom_ip
+        if [[ -z "$custom_ip" ]]; then
+            custom_ip=$(curl -s https://api.ipify.org)
+        fi
+        read -p "请输入要生成SS链接的端口 [默认: ${port}]: " custom_port
+        if [[ -z "$custom_port" ]]; then
+            custom_port=${port}
+        fi
         # 生成SS URI
-        ss_uri=$(echo -n "${method}:${password}@$(curl -s https://api.ipify.org):${port}" | base64 -w 0)
-        echo -e "${GREEN}SS链接: ss://${ss_uri}#SS-${port}-${method}${PLAIN}"
+        ss_uri=$(echo -n "${method}:${password}@${custom_ip}:${custom_port}" | base64 -w 0)
+        echo -e "\n${GREEN}SS链接: ${PLAIN}ss://${ss_uri}#SS-${custom_port}-${method}"
     else
         echo -e "${RED}配置文件不存在，请先安装xray！${PLAIN}"
     fi
@@ -799,9 +808,18 @@ export_config() {
                 echo -e "${GREEN}密码: ${PLAIN}${password}"
                 echo -e "${GREEN}加密方法: ${PLAIN}${method}"
                 
+                # 新增：询问用户输入IP和端口
+                read -p "请输入要生成SS链接的服务器IP [默认: $(curl -s https://api.ipify.org)]: " custom_ip
+                if [[ -z "$custom_ip" ]]; then
+                    custom_ip=$(curl -s https://api.ipify.org)
+                fi
+                read -p "请输入要生成SS链接的端口 [默认: ${port}]: " custom_port
+                if [[ -z "$custom_port" ]]; then
+                    custom_port=${port}
+                fi
                 # 生成SS URI
-                ss_uri=$(echo -n "${method}:${password}@$(curl -s https://api.ipify.org):${port}" | base64 -w 0)
-                echo -e "\n${GREEN}SS链接: ${PLAIN}ss://${ss_uri}#SS-${port}-${method}"
+                ss_uri=$(echo -n "${method}:${password}@${custom_ip}:${custom_port}" | base64 -w 0)
+                echo -e "\n${GREEN}SS链接: ${PLAIN}ss://${ss_uri}#SS-${custom_port}-${method}"
             else
                 # 多用户配置（保留兼容性）
                 echo -e "${YELLOW}这是一个多用户Shadowsocks节点，已不再支持。${PLAIN}"
