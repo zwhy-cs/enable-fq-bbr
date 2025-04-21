@@ -70,7 +70,8 @@ install_update_xray() {
     # 创建日志目录（如果不存在）
     mkdir -p ${LOG_DIR}
     
-    # 如果配置文件不存在，创建一个基本配置
+# 如果配置文件不存在，才创建一个基本配置
+if [[ ! -f ${CONFIG_FILE} ]]; then
     cat >${CONFIG_FILE} <<-EOF
 {
     "log": {
@@ -82,6 +83,7 @@ install_update_xray() {
     "outbounds": []
 }
 EOF
+fi
     
     # 设置权限
     chmod 644 ${CONFIG_FILE}
@@ -587,7 +589,7 @@ add_shadowsocks() {
     echo "2. aes-256-gcm (推荐)"
     echo "3. chacha20-poly1305"
     echo "4. 2022-blake3-aes-128-gcm"
-    read -p "请选择 [1-3, 默认: 2]: " method_choice
+    read -p "请选择 [1-4, 默认: 2]: " method_choice
     
     case $method_choice in
         1) method="aes-128-gcm" ;;
