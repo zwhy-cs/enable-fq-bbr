@@ -1009,6 +1009,56 @@ view_log() {
     esac
 }
 
+toggle_node() {
+    echo -e "${GREEN}启用/禁用节点...${PLAIN}"
+    if [[ ! -f ${CONFIG_FILE} ]]; then
+        echo -e "${RED}请先安装 Xray！${PLAIN}"
+        return
+    fi
+    # 确保 disabled_inbounds 字段存在
+    jq 'if .disabled_inbounds? == null then . + {disabled_inbounds: []} else . end' ${CONFIG_FILE} > ${CONFIG_FILE}.tmp \
+        && mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
+
+    echo -e "\n${YELLOW}已启用节点列表:${PLAIN}"
+    jq -r '.inbounds[] | "协议:\(.protocol) 端口:\(.port)"' ${CONFIG_FILE}
+
+    echo -e "\n${YELLOW}已禁用节点列表:${PLAIN}"
+    jq -r '.disabled_inbounds[] | "协议:\(.protocol) 端口:\(.port)"' ${CONFIG_FILE}
+
+    read -p $'\n请选择操作: [e] 启用节点  [d] 禁用节点 : ' action
+    case "$action" in
+        d)
+            read -p "请输入要禁用的节点端口号: " port
+            jq --arg p "$port" '
+                . as $c 
+                | ($c.inbounds[] | select(.port|tostring==$p)) as $item 
+                | $c 
+                | .inbounds = ($c.inbounds | map(select(.port|tostring!=$p)))
+                | .disabled_inbounds += [$item]
+            ' ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
+            ;;
+        e)
+            read -p "请输入要启用的节点端口号: " port
+            jq --arg p "$port" '
+                . as $c 
+                | ($c.disabled_inbounds[] | select(.port|tostring==$p)) as $item 
+                | $c 
+                | .disabled_inbounds = ($c.disabled_inbounds | map(select(.port|tostring!=$p)))
+                | .inbounds += [$item]
+            ' ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
+            ;;
+        *)
+            echo -e "${YELLOW}操作已取消。${PLAIN}"
+            return
+            ;;
+    esac
+
+    mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
+    echo -e "${GREEN}节点操作完成，正在重启 Xray...${PLAIN}"
+    systemctl restart xray
+    echo -e "${GREEN}Xray 已重启，配置已生效！${PLAIN}"
+}
+
 # 查看当前Xray配置
 view_config() {
     echo -e "${GREEN}查看当前Xray配置...${PLAIN}"
@@ -1271,11 +1321,12 @@ show_menu() {
   ${GREEN}5.${PLAIN} 添加 Shadowsocks 节点(单用户)
   ${GREEN}6.${PLAIN} 导出现有节点配置
   ${GREEN}7.${PLAIN} 删除节点
-  ${GREEN}8.${PLAIN} 查看 Xray 日志
-  ${GREEN}9.${PLAIN} 查看当前 Xray 配置
-  ${GREEN}10.${PLAIN} 修改 Xray 配置文件
+  ${GREEN}8.${PLAIN} 启用/禁用节点
+  ${GREEN}9.${PLAIN} 查看 Xray 日志
+  ${GREEN}10.${PLAIN} 查看当前 Xray 配置
+  ${GREEN}11.${PLAIN} 修改 Xray 配置文件
   ${GREEN}————————————————— 其他选项 —————————————————${PLAIN}
-  ${GREEN}11.${PLAIN} 更新当前脚本
+  ${GREEN}12.${PLAIN} 更新当前脚本
   ${GREEN}0.${PLAIN} 退出脚本
     "
     echo && read -p "请输入选择 [0-11]: " num
@@ -1289,11 +1340,12 @@ show_menu() {
         5) add_shadowsocks ;;
         6) export_config ;;
         7) delete_node ;;
-        8) view_log ;;
-        9) view_config ;;
-        10) edit_config ;;
-        11) update_script ;;
-        *) echo -e "${RED}请输入正确的数字 [0-11]${PLAIN}" ;;
+        8) toggle_node ;;
+        9) view_log ;;
+        10) view_config ;;
+        11) edit_config ;;
+        12) update_script ;;
+        *) echo -e "${RED}请输入正确的数字 [0-12]${PLAIN}" ;;
     esac
 }
 
