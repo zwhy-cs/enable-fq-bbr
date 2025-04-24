@@ -1398,7 +1398,7 @@ show_menu() {
   ${GREEN}12.${PLAIN} 更新当前脚本
   ${GREEN}0.${PLAIN} 退出脚本
     "
-    echo && read -p "请输入选择 [0-11]: " num
+    echo && read -p "请输入选择 [0-12]: " num
     
     case "${num}" in
         0) exit 0 ;;
