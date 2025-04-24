@@ -1009,125 +1009,6 @@ view_log() {
     esac
 }
 
-toggle_node() {
-    echo -e "${GREEN}启用/禁用节点...${PLAIN}"
-    [[ ! -f ${CONFIG_FILE} ]] && { echo -e "${RED}请先安装 Xray！${PLAIN}"; return; }
-
-    # 确保 disabled_inbounds 字段存在
-    jq 'if .disabled_inbounds? == null then . + {disabled_inbounds: []} else . end' \
-        ${CONFIG_FILE} > ${CONFIG_FILE}.tmp && mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
-
-    # 构建已启用节点列表（把 Reality 成对处理）
-    declare -a desc_enabled key_enabled
-    # 1) Reality 节点
-    while read -r tag; do
-        port=$(jq -r --arg t "$tag" '.inbounds[]|select(.tag==$t).port' ${CONFIG_FILE})
-        desc_enabled+=("REALITY 外部端口:${port}")
-        key_enabled+=("reality::$tag")
-    done < <(jq -r '.inbounds[] | select(.protocol=="dokodemo-door") | .tag' ${CONFIG_FILE})
-    # 2) Shadowsocks
-    while read -r port; do
-        desc_enabled+=("Shadowsocks 端口:${port}")
-        key_enabled+=("ss::$port")
-    done < <(jq -r '.inbounds[] | select(.protocol=="shadowsocks") | .port' ${CONFIG_FILE})
-    # 3) 独立 VLESS（listen≠127.0.0.1）
-    while read -r port; do
-        desc_enabled+=("VLESS 端口:${port}")
-        key_enabled+=("vless::$port")
-    done < <(jq -r '.inbounds[] | select(.protocol=="vless" and (.listen//"0.0.0.0")!="127.0.0.1") | .port' ${CONFIG_FILE})
-
-    # 构建已禁用节点列表，同上
-    declare -a desc_disabled key_disabled
-    while read -r tag; do
-        port=$(jq -r --arg t "$tag" '.disabled_inbounds[]|select(.tag==$t).port' ${CONFIG_FILE})
-        desc_disabled+=("REALITY 外部端口:${port}")
-        key_disabled+=("reality::$tag")
-    done < <(jq -r '.disabled_inbounds[] | select(.protocol=="dokodemo-door") | .tag' ${CONFIG_FILE})
-    while read -r port; do
-        desc_disabled+=("Shadowsocks 端口:${port}")
-        key_disabled+=("ss::$port")
-    done < <(jq -r '.disabled_inbounds[] | select(.protocol=="shadowsocks") | .port' ${CONFIG_FILE})
-    while read -r port; do
-        desc_disabled+=("VLESS 端口:${port}")
-        key_disabled+=("vless::$port")
-    done < <(jq -r '.disabled_inbounds[] | select(.protocol=="vless" and (.listen//"0.0.0.0")!="127.0.0.1") | .port' ${CONFIG_FILE})
-
-    # 打印菜单
-    echo -e "\n${YELLOW}已启用节点:${PLAIN}"
-    for i in "${!desc_enabled[@]}"; do
-        echo -e "  [${i}] ${desc_enabled[$i]}"
-    done
-    echo -e "\n${YELLOW}已禁用节点:${PLAIN}"
-    for i in "${!desc_disabled[@]}"; do
-        echo -e "  [${i}] ${desc_disabled[$i]}"
-    done
-
-    # 用户选择
-    read -p $'\n请选择操作 ([e] 启用已禁用节点 / [d] 禁用已启用节点): ' act
-    case "$act" in
-        d)
-            read -p "请输入要禁用的编号: " idx
-            sel="${key_enabled[$idx]}"
-            ;;
-        e)
-            read -p "请输入要启用的编号: " idx
-            sel="${key_disabled[$idx]}"
-            ;;
-        *)
-            echo -e "${YELLOW}操作已取消。${PLAIN}"
-            return
-            ;;
-    esac
-
-    type="${sel%%::*}"
-    key="${sel##*::}"
-
-    # 根据类型成对移动
-    case "$type" in
-        reality)
-            # dokodemo-door 入站的 tag 是 key，先取出两段 JSON
-            item1=$(jq --arg t "$key" '.inbounds? // .disabled_inbounds? | map(select(.tag==$t))[0]' ${CONFIG_FILE})
-            internal_port=$(jq -r --arg t "$key" '.inbounds? // .disabled_inbounds? | map(select(.tag==$t))[0].settings.port' ${CONFIG_FILE})
-            item2=$(jq --arg p "$internal_port" '.inbounds? // .disabled_inbounds? | map(select(.protocol=="vless" and .port==$p and (.listen//"")=="127.0.0.1"))[0]' ${CONFIG_FILE})
-
-            if [[ "$act" == "d" ]]; then
-                # 从 inbounds 移出，加入 disabled_inbounds
-                jq --argjson a "$item1" --argjson b "$item2" '
-                  .inbounds -= [$a, $b] |
-                  .disabled_inbounds += [$a, $b]
-                ' ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
-            else
-                # 从 disabled_inbounds 移出，加入 inbounds
-                jq --argjson a "$item1" --argjson b "$item2" '
-                  .disabled_inbounds -= [$a, $b] |
-                  .inbounds += [$a, $b]
-                ' ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
-            fi
-            ;;
-        ss|vless)
-            # 单条记录 操作 port == key
-            if [[ "$act" == "d" ]]; then
-                jq --arg p "$key" '
-                  (.inbounds[] | select(.port|tostring==$p)) as $it |
-                  .inbounds -= [$it] |
-                  .disabled_inbounds += [$it]
-                ' ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
-            else
-                jq --arg p "$key" '
-                  (.disabled_inbounds[] | select(.port|tostring==$p)) as $it |
-                  .disabled_inbounds -= [$it] |
-                  .inbounds += [$it]
-                ' ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
-            fi
-            ;;
-    esac
-
-    mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
-    echo -e "${GREEN}操作完成，正在重启 Xray...${PLAIN}"
-    systemctl restart xray
-    echo -e "${GREEN}已重启，生效完成！${PLAIN}"
-}
-
 # 查看当前Xray配置
 view_config() {
     echo -e "${GREEN}查看当前Xray配置...${PLAIN}"
@@ -1409,7 +1290,7 @@ show_menu() {
         5) add_shadowsocks ;;
         6) export_config ;;
         7) delete_node ;;
-        8) toggle_node ;;
+        #8) toggle_node ;;
         9) view_log ;;
         10) view_config ;;
         11) edit_config ;;
