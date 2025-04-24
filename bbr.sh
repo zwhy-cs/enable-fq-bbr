@@ -138,9 +138,11 @@ apt-get update && apt-get install -y curl sudo wget python3 nano
 ##############################
 echo "开始修改 sysctl 配置..."
 # 备份原有 sysctl 配置文件
-cp /etc/sysctl.conf /etc/sysctl.conf.bak
-rm /etc/sysctl.conf
-
+if [ -f /etc/sysctl.conf ]; then
+  cp /etc/sysctl.conf /etc/sysctl.conf.bak
+else
+  touch /etc/sysctl.conf
+fi
 # 设置默认队列调度算法为 fq
 if grep -q "net.core.default_qdisc" /etc/sysctl.conf; then
   sed -i "s/.*net.core.default_qdisc.*/net.core.default_qdisc = fq/" /etc/sysctl.conf
