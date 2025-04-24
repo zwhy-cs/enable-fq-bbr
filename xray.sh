@@ -70,20 +70,33 @@ install_update_xray() {
     # 创建日志目录（如果不存在）
     mkdir -p ${LOG_DIR}
     
-# 如果配置文件不存在，才创建一个基本配置
-if [[ ! -f ${CONFIG_FILE} ]]; then
-    cat >${CONFIG_FILE} <<-EOF
+    # 如果配置文件不存在，才创建一个基本配置
+    if [[ ! -f ${CONFIG_FILE} ]]; then
+        cat >${CONFIG_FILE} <<-EOF
 {
     "log": {
         "loglevel": "warning",
         "access": "${LOG_DIR}/access.log",
         "error": "${LOG_DIR}/error.log"
     },
-    "inbounds": [],
+    "stats": {},
+    "api": {
+        "services": ["StatsService"],
+        "tag": "api"
+    },
+    "inbounds": [
+        {
+            "listen": "127.0.0.1",
+            "port": 10085,
+            "protocol": "dokodemo-door",
+            "settings": {"address": "127.0.0.1"},
+            "tag": "api"
+        }
+    ],
     "outbounds": []
 }
 EOF
-fi
+    fi
     
     # 设置权限
     chmod 644 ${CONFIG_FILE}
@@ -153,8 +166,6 @@ check_xray_status() {
         echo -e "${RED}Xray 服务状态: 未运行${PLAIN}"
     fi
 }
-
-
 
 # 添加多个 Reality 节点
 add_multiple_reality() {
@@ -434,6 +445,7 @@ add_shadowsocks() {
         # 创建 Shadowsocks 配置
         ss_config=$(cat <<EOF
 {
+  "tag": "ss-in-${port}",
   "protocol": "shadowsocks",
   "port": ${port},
   "settings": {
@@ -1081,6 +1093,41 @@ full_uninstall() {
     exit 0
 }
 
+# 查看节点流量统计
+view_stats() {
+    echo -e "${GREEN}节点流量统计:${PLAIN}"
+    if [[ -f ${CONFIG_FILE} ]]; then
+        inbound_count=$(jq '.inbounds | length' ${CONFIG_FILE})
+        for ((i=0; i<${inbound_count}; i++)); do
+            tag=$(jq -r ".inbounds[$i].tag // \"\"" ${CONFIG_FILE})
+            protocol=$(jq -r ".inbounds[$i].protocol" ${CONFIG_FILE})
+            port=$(jq -r ".inbounds[$i].port // \"\"" ${CONFIG_FILE})
+            if [[ -n "$tag" ]]; then
+                # 查询入站流量
+                uplink=$(curl -s -X POST http://127.0.0.1:10085/stats/query -d '{"pattern":"inbound>>>'"$tag"'>>>uplink"}' | jq -r '.stat.value // 0')
+                downlink=$(curl -s -X POST http://127.0.0.1:10085/stats/query -d '{"pattern":"inbound>>>'"$tag"'>>>downlink"}' | jq -r '.stat.value // 0')
+                uplink_gb=$(awk "BEGIN{printf \"%.2f\",$uplink/1024/1024/1024}")
+                downlink_gb=$(awk "BEGIN{printf \"%.2f\",$downlink/1024/1024/1024}")
+                echo -e "${YELLOW}[$i] 协议: $protocol, 端口: $port, tag: $tag${PLAIN}"
+                echo -e "  上行: $uplink_gb GB, 下行: $downlink_gb GB"
+            fi
+        done
+    else
+        echo -e "${RED}配置文件不存在！${PLAIN}"
+    fi
+}
+
+# 重启Xray服务
+restart_xray() {
+    echo -e "${YELLOW}正在重启Xray服务...${PLAIN}"
+    systemctl restart xray
+    if systemctl is-active --quiet xray; then
+        echo -e "${GREEN}Xray服务已成功重启！${PLAIN}"
+    else
+        echo -e "${RED}Xray服务重启失败，请检查配置！${PLAIN}"
+    fi
+}
+
 # 显示菜单
 show_menu() {
     clear
@@ -1103,9 +1150,11 @@ show_menu() {
   ${GREEN}————————————————— 其他选项 —————————————————${PLAIN}
   ${GREEN}11.${PLAIN} 更新当前脚本
   ${GREEN}12.${PLAIN} 彻底删除脚本和所有生成文件
+  ${GREEN}13.${PLAIN} 查看节点流量统计
+  ${GREEN}14.${PLAIN} 重启Xray服务
   ${GREEN}0.${PLAIN} 退出脚本
     "
-    echo && read -p "请输入选择 [0-12]: " num
+    echo && read -p "请输入选择 [0-14]: " num
     
     case "${num}" in
         0) exit 0 ;;
@@ -1121,7 +1170,9 @@ show_menu() {
         10) edit_config ;;
         11) update_script ;;
         12) full_uninstall ;;
-        *) echo -e "${RED}请输入正确的数字 [0-12]${PLAIN}" ;;
+        13) view_stats ;;
+        14) restart_xray ;;
+        *) echo -e "${RED}请输入正确的数字 [0-14]${PLAIN}" ;;
     esac
 }
 
