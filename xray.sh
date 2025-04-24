@@ -1051,6 +1051,36 @@ update_script() {
     fi
 }
 
+# 彻底删除脚本和所有生成文件
+full_uninstall() {
+    echo -e "${YELLOW}即将彻底删除Xray及所有相关文件，包括本脚本自身！${PLAIN}"
+    read -p "确认要继续吗？(y/n): " confirm
+    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+        echo -e "${GREEN}操作已取消。${PLAIN}"
+        return
+    fi
+    
+    # 停止并禁用服务
+    systemctl stop xray 2>/dev/null
+    systemctl disable xray 2>/dev/null
+    
+    # 删除Xray主程序
+    rm -f /usr/local/bin/xray
+    # 删除配置和日志
+    rm -rf /usr/local/etc/xray
+    rm -rf /var/log/xray
+    # 删除systemd服务文件
+    rm -f /etc/systemd/system/xray.service
+    systemctl daemon-reload
+    # 删除本脚本自身
+    SCRIPT_PATH=$(readlink -f "$0")
+    echo -e "${YELLOW}即将删除本脚本自身: $SCRIPT_PATH${PLAIN}"
+    sleep 1
+    rm -f "$SCRIPT_PATH"
+    echo -e "${GREEN}所有相关文件已删除，脚本已自毁。${PLAIN}"
+    exit 0
+}
+
 # 显示菜单
 show_menu() {
     clear
@@ -1072,9 +1102,10 @@ show_menu() {
   ${GREEN}10.${PLAIN} 修改 Xray 配置文件
   ${GREEN}————————————————— 其他选项 —————————————————${PLAIN}
   ${GREEN}11.${PLAIN} 更新当前脚本
+  ${GREEN}12.${PLAIN} 彻底删除脚本和所有生成文件
   ${GREEN}0.${PLAIN} 退出脚本
     "
-    echo && read -p "请输入选择 [0-11]: " num
+    echo && read -p "请输入选择 [0-12]: " num
     
     case "${num}" in
         0) exit 0 ;;
@@ -1089,7 +1120,8 @@ show_menu() {
         9) view_config ;;
         10) edit_config ;;
         11) update_script ;;
-        *) echo -e "${RED}请输入正确的数字 [0-11]${PLAIN}" ;;
+        12) full_uninstall ;;
+        *) echo -e "${RED}请输入正确的数字 [0-12]${PLAIN}" ;;
     esac
 }
 
