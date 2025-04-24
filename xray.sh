@@ -154,171 +154,7 @@ check_xray_status() {
     fi
 }
 
-# 添加 Reality 节点
-add_reality() {
-    echo -e "${GREEN}添加 REALITY 节点...${PLAIN}"
-    
-    # 生成UUID
-    uuid=$(xray uuid)
-    echo -e "${GREEN}已生成UUID: ${uuid}${PLAIN}"
-    
-    # 生成 REALITY 密钥对
-    key_pair=$(xray x25519)
-    private_key=$(echo "$key_pair" | grep "Private" | awk '{print $3}')
-    public_key=$(echo "$key_pair" | grep "Public" | awk '{print $3}')
-    
-    # 获取端口 (对外端口)
-    read -p "请输入外部端口号 [默认: 443]: " port
-    port=${port:-443}
-    
-    # 内部端口
-    internal_port=4431
-    
-    # 获取服务器名称
-    read -p "请输入服务器名称(SNI) [例如: speed.cloudflare.com]: " server_name
-    server_name=${server_name:-speed.cloudflare.com}
-    
-    # 获取短ID
-    short_ids_json=$(jq -n --arg id1 "" --arg id2 "$(openssl rand -hex 8)" '[$id1, $id2]')
-    
-    # 更新配置文件
-    if [[ -f ${CONFIG_FILE} ]]; then
-        # 备份配置文件
-        cp ${CONFIG_FILE} ${CONFIG_FILE}.bak
-        
-        # 创建 dokodemo-door 入站配置
-        dokodemo_config=$(cat <<EOF
-{
-    "tag": "dokodemo-in",
-    "port": ${port},
-    "protocol": "dokodemo-door",
-    "settings": {
-        "address": "127.0.0.1",
-        "port": ${internal_port},
-        "network": "tcp"
-    },
-    "sniffing": {
-        "enabled": true,
-        "destOverride": [
-            "tls"
-        ],
-        "routeOnly": true
-    }
-}
-EOF
-)
 
-        # 创建 vless 入站配置
-        vless_config=$(cat <<EOF
-{
-    "listen": "127.0.0.1",
-    "port": ${internal_port},
-    "protocol": "vless",
-    "settings": {
-        "clients": [
-            {
-                "id": "${uuid}",
-                "flow": "xtls-rprx-vision"
-            }
-        ],
-        "decryption": "none"
-    },
-    "streamSettings": {
-        "network": "tcp",
-        "security": "reality",
-        "realitySettings": {
-            "dest": "${server_name}:443",
-            "serverNames": [
-                "${server_name}"
-            ],
-            "privateKey": "${private_key}",
-            "shortIds": ${short_ids_json},
-            "publicKey": "${public_key}"
-        }
-    },
-    "sniffing": {
-        "enabled": true,
-        "destOverride": [
-            "http",
-            "tls",
-            "quic"
-        ],
-        "routeOnly": true
-    }
-}
-EOF
-)
-
-        # 添加必要的出站配置
-        outbounds_config=$(cat <<EOF
-[
-    {
-        "protocol": "freedom",
-        "tag": "direct"
-    },
-    {
-        "protocol": "blackhole",
-        "tag": "block"
-    }
-]
-EOF
-)
-
-        # 添加路由规则
-        routing_config=$(cat <<EOF
-{
-    "rules": [
-        {
-            "inboundTag": [
-                "dokodemo-in"
-            ],
-            "domain": [
-                "${server_name}"
-            ],
-            "outboundTag": "direct"
-        },
-        {
-            "inboundTag": [
-                "dokodemo-in"
-            ],
-            "outboundTag": "block"
-        }
-    ]
-}
-EOF
-)
-        
-        # 添加新的入站配置和出站配置
-        jq --argjson dokodemo "$dokodemo_config" --argjson vless "$vless_config" --argjson outbounds "$outbounds_config" --argjson routing "$routing_config" \
-        '.inbounds = [.inbounds[] | select(.tag != "dokodemo-in")] + [$dokodemo, $vless] | .outbounds = $outbounds | .routing = $routing' \
-        ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
-        mv ${CONFIG_FILE}.tmp ${CONFIG_FILE}
-        
-        # 重启xray服务
-        systemctl restart xray
-        
-        # 显示客户端配置信息
-        echo -e "\n${GREEN}安全的 REALITY 节点已添加成功!${PLAIN}"
-        echo -e "${YELLOW}=== 客户端配置信息 ===${PLAIN}"
-        echo -e "${GREEN}协议: VLESS${PLAIN}"
-        echo -e "${GREEN}地址: $(curl -s https://api.ipify.org)${PLAIN}"
-        echo -e "${GREEN}端口: ${port}${PLAIN}"
-        echo -e "${GREEN}UUID: ${uuid}${PLAIN}"
-        echo -e "${GREEN}流控: xtls-rprx-vision${PLAIN}"
-        echo -e "${GREEN}传输协议: tcp${PLAIN}"
-        echo -e "${GREEN}安全层: reality${PLAIN}"
-        echo -e "${GREEN}SNI: ${server_name}${PLAIN}"
-        echo -e "${GREEN}PublicKey: ${public_key}${PLAIN}"
-        echo -e "${GREEN}ShortID: $(echo $short_ids_json | jq -r '.[1]')${PLAIN}"
-        echo -e "${GREEN}请注意：这是使用dokodemo-door代理的安全Reality配置${PLAIN}"
-        
-        # 生成分享链接
-        share_link="vless://${uuid}@$(curl -s https://api.ipify.org):${port}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${server_name}&fp=chrome&pbk=${public_key}&sid=$(echo $short_ids_json | jq -r '.[1]')#REALITY-${port}"
-        echo -e "${GREEN}分享链接: ${share_link}${PLAIN}"
-    else
-        echo -e "${RED}配置文件不存在，请先安装xray！${PLAIN}"
-    fi
-}
 
 # 添加多个 Reality 节点
 add_multiple_reality() {
@@ -376,6 +212,12 @@ add_multiple_reality() {
         read -p "请输入第 $i 个节点的外部端口号 [默认: $((443 + $i - 1))]: " port
         port=${port:-$((443 + $i - 1))}
         
+        # 获取节点名称
+        read -p "请输入第 $i 个节点的名称（可选，留空则自动命名）: " node_name
+        if [[ -z "$node_name" ]]; then
+            node_name="REALITY-${port}"
+        fi
+        
         # 查找未被使用的内部端口
         internal_port=$start_internal_port
         while [[ " ${used_internal_ports[@]} " =~ " ${internal_port} " ]]; do
@@ -402,7 +244,7 @@ add_multiple_reality() {
             # 创建 dokodemo-door 入站配置
             dokodemo_config=$(cat <<EOF
 {
-    "tag": "dokodemo-in-${port}",
+    "tag": "$node_name",
     "port": ${port},
     "protocol": "dokodemo-door",
     "settings": {
@@ -424,6 +266,7 @@ EOF
             # 创建 vless 入站配置
             vless_config=$(cat <<EOF
 {
+    "tag": "$node_name",
     "listen": "127.0.0.1",
     "port": ${internal_port},
     "protocol": "vless",
@@ -466,7 +309,7 @@ EOF
             routing_rule_domain=$(cat <<EOF
 {
     "inboundTag": [
-        "dokodemo-in-${port}"
+        "$node_name"
     ],
     "domain": [
         "${server_name}"
@@ -479,7 +322,7 @@ EOF
             routing_rule_block=$(cat <<EOF
 {
     "inboundTag": [
-        "dokodemo-in-${port}"
+        "$node_name"
     ],
     "outboundTag": "block"
 }
@@ -578,6 +421,12 @@ add_shadowsocks() {
     read -p "请输入端口号 [默认: 8388]: " port
     port=${port:-8388}
     
+    # 获取节点名称
+    read -p "请输入节点名称（可选，留空则自动命名）: " node_name
+    if [[ -z "$node_name" ]]; then
+        node_name="SS-${port}"
+    fi
+    
     # 生成随机密码
     default_password=$(openssl rand -base64 16)
     read -p "请输入用户密码 [默认随机: ${default_password}]: " password
@@ -603,6 +452,7 @@ add_shadowsocks() {
         # 创建 Shadowsocks 配置
         ss_config=$(cat <<EOF
 {
+  "tag": "${node_name}",
   "protocol": "shadowsocks",
   "port": ${port},
   "settings": {
@@ -691,43 +541,40 @@ export_config() {
         for ((i=0; i<${inbound_count}; i++)); do
             protocol=$(jq -r ".inbounds[$i].protocol" ${CONFIG_FILE})
             port=$(jq -r ".inbounds[$i].port" ${CONFIG_FILE})
+            tag=$(jq -r ".inbounds[$i].tag // \"未命名\"" ${CONFIG_FILE})
             
             if [[ "$protocol" == "dokodemo-door" ]]; then
-                tag=$(jq -r ".inbounds[$i].tag // \"\"" ${CONFIG_FILE})
                 if [[ "$tag" == "dokodemo-in" || "$tag" =~ ^dokodemo-in-[0-9]+$ ]]; then
-                    # REALITY节点的外部入口（支持单个和批量创建的节点）
                     internal_port=$(jq -r ".inbounds[$i].settings.port" ${CONFIG_FILE})
                     node_list+=($i)
                     node_type+=("reality")
-                    echo -e "${GREEN}[${count}] REALITY节点 (外部端口: ${port})${PLAIN}"
+                    echo -e "${GREEN}[${count}] ${tag} (REALITY, 外部端口: ${port})${PLAIN}"
                     count=$((count+1))
                 else
                     node_list+=($i)
                     node_type+=("other")
-                    echo -e "${GREEN}[${count}] ${protocol}节点 (端口: ${port})${PLAIN}"
+                    echo -e "${GREEN}[${count}] ${tag} (${protocol}, 端口: ${port})${PLAIN}"
                     count=$((count+1))
                 fi
             elif [[ "$protocol" == "shadowsocks" ]]; then
-                # Shadowsocks节点
                 node_list+=($i)
                 node_type+=("ss")
-                echo -e "${GREEN}[${count}] Shadowsocks节点 (端口: ${port})${PLAIN}"
+                echo -e "${GREEN}[${count}] ${tag} (Shadowsocks, 端口: ${port})${PLAIN}"
                 count=$((count+1))
             elif [[ "$protocol" == "vless" ]]; then
                 listen=$(jq -r ".inbounds[$i].listen // \"0.0.0.0\"" ${CONFIG_FILE})
                 if [[ "$listen" == "127.0.0.1" ]]; then
-                    # 这可能是REALITY的内部配置，跳过
                     continue
                 else
                     node_list+=($i)
                     node_type+=("vless")
-                    echo -e "${GREEN}[${count}] VLESS节点 (端口: ${port})${PLAIN}"
+                    echo -e "${GREEN}[${count}] ${tag} (VLESS, 端口: ${port})${PLAIN}"
                     count=$((count+1))
                 fi
             else
                 node_list+=($i)
                 node_type+=("other")
-                echo -e "${GREEN}[${count}] ${protocol}节点 (端口: ${port})${PLAIN}"
+                echo -e "${GREEN}[${count}] ${tag} (${protocol}, 端口: ${port})${PLAIN}"
                 count=$((count+1))
             fi
         done
