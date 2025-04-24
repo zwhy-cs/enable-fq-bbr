@@ -230,11 +230,6 @@ add_multiple_reality() {
         
         # 更新配置文件
         if [[ -f ${CONFIG_FILE} ]]; then
-            # 备份配置文件
-            if [[ $i -eq 1 ]]; then
-                cp ${CONFIG_FILE} ${CONFIG_FILE}.bak
-            fi
-            
             # 创建 dokodemo-door 入站配置
             dokodemo_config=$(cat <<EOF
 {
@@ -449,9 +444,6 @@ add_shadowsocks() {
 }
 EOF
 )
-        
-        # 备份配置文件
-        cp ${CONFIG_FILE} ${CONFIG_FILE}.bak
         
         # 添加新的入站配置
         jq --argjson new_inbound "$ss_config" '.inbounds += [$new_inbound]' ${CONFIG_FILE} > ${CONFIG_FILE}.tmp
@@ -747,9 +739,6 @@ delete_node() {
             return
         fi
         
-        # 备份配置
-        cp ${CONFIG_FILE} ${CONFIG_FILE}.bak
-        
         # 获取对应的实际节点索引
         actual_index=${node_list[$delete_index]}
         
@@ -1009,10 +998,6 @@ edit_config() {
             fi
         fi
         
-        # 创建配置文件备份
-        cp ${CONFIG_FILE} ${CONFIG_FILE}.bak_$(date +%Y%m%d%H%M%S)
-        echo -e "${YELLOW}已创建配置文件备份: ${CONFIG_FILE}.bak_$(date +%Y%m%d%H%M%S)${PLAIN}"
-        
         # 使用nano编辑配置文件
         echo -e "${YELLOW}按任意键开始编辑配置文件...${PLAIN}"
         read -n 1 -s
@@ -1031,29 +1016,12 @@ edit_config() {
                     echo -e "${GREEN}Xray服务已成功重启！${PLAIN}"
                 else
                     echo -e "${RED}Xray服务重启失败，请检查配置是否正确！${PLAIN}"
-                    echo -e "${YELLOW}是否恢复之前的备份？[y/n]: ${PLAIN}"
-                    read restore_backup
-                    
-                    if [[ "$restore_backup" == "y" || "$restore_backup" == "Y" ]]; then
-                        cp ${CONFIG_FILE}.bak_$(date +%Y%m%d%H%M%S) ${CONFIG_FILE}
-                        systemctl restart xray
-                        echo -e "${GREEN}已恢复配置文件并重启服务！${PLAIN}"
-                    fi
                 fi
             else
                 echo -e "${YELLOW}配置已修改但未重启服务，修改尚未生效。${PLAIN}"
             fi
         else
             echo -e "${RED}配置文件JSON格式无效！${PLAIN}"
-            echo -e "${YELLOW}是否恢复之前的备份？[y/n]: ${PLAIN}"
-            read restore_backup
-            
-            if [[ "$restore_backup" == "y" || "$restore_backup" == "Y" ]]; then
-                cp ${CONFIG_FILE}.bak_$(date +%Y%m%d%H%M%S) ${CONFIG_FILE}
-                echo -e "${GREEN}已恢复配置文件！${PLAIN}"
-            else
-                echo -e "${RED}请手动修复配置文件，否则Xray可能无法正常启动！${PLAIN}"
-            fi
         fi
     else
         echo -e "${RED}配置文件不存在，请先安装xray！${PLAIN}"
@@ -1072,11 +1040,6 @@ update_script() {
     
     echo -e "${YELLOW}正在从 GitHub 下载最新版本...${PLAIN}"
     
-    # 备份当前脚本
-    BACKUP_PATH="${SCRIPT_PATH}.bak_$(date +%Y%m%d%H%M%S)"
-    cp "$SCRIPT_PATH" "$BACKUP_PATH"
-    echo -e "${YELLOW}已创建备份: ${BACKUP_PATH}${PLAIN}"
-    
     # 直接下载并替换当前脚本
     if curl -s -o "$SCRIPT_PATH" "$GITHUB_RAW_URL"; then
         chmod +x "$SCRIPT_PATH"
@@ -1084,10 +1047,7 @@ update_script() {
         echo -e "${YELLOW}请重新执行脚本以应用更新。${PLAIN}"
         exit 0
     else
-        echo -e "${RED}下载更新失败，正在恢复备份...${PLAIN}"
-        cp "$BACKUP_PATH" "$SCRIPT_PATH"
-        chmod +x "$SCRIPT_PATH"
-        echo -e "${GREEN}已恢复到备份版本。${PLAIN}"
+        echo -e "${RED}下载更新失败，请手动检查网络或稍后重试。${PLAIN}"
     fi
 }
 

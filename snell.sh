@@ -295,7 +295,7 @@ view_config() {
         SERVER_IP=$(ip -4 addr | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v "127.0.0.1" | head -n 1)
         echo "Surge/Shadowrocket 配置:"
         echo "[Proxy]"
-        echo "Snell = snell, ${SERVER_IP:-<服务器IP>}, ${PORT:-<端口>}, psk=${PSK:-<密钥>}, version=4"
+        echo "Snell = snell, ${SERVER_IP:-<服务器IP>}, ${PORT:-<端口>}, psk=${PSK:-<密钥>}, version=4, reuse=true, block-quic=on"
     else
         echo "未找到 Snell 配置文件：${CONFIG_FILE}"
     fi
