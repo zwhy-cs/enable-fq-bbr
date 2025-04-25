@@ -139,20 +139,6 @@ install_update_xray() {
           "api"
         ],
         "outboundTag": "api"
-      },
-      {
-        "type": "field",
-        "outboundTag": "blocked",
-        "ip": [
-          "geoip:private"
-        ]
-      },
-      {
-        "type": "field",
-        "outboundTag": "blocked",
-        "protocol": [
-          "bittorrent"
-        ]
       }
     ]
   },
