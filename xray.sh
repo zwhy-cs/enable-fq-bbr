@@ -74,40 +74,89 @@ install_update_xray() {
     if [[ ! -f ${CONFIG_FILE} ]]; then
         cat >${CONFIG_FILE} <<-EOF
 {
-    "log": {
-        "loglevel": "warning",
-        "access": "${LOG_DIR}/access.log",
-        "error": "${LOG_DIR}/error.log"
+  "log": {
+    "access": "none",
+    "dnsLog": false,
+    "error": "",
+    "loglevel": "warning",
+    "maskAddress": ""
+  },
+  "api": {
+    "tag": "api",
+    "services": [
+      "HandlerService",
+      "LoggerService",
+      "StatsService"
+    ]
+  },
+  "inbounds": [
+    {
+      "tag": "api",
+      "listen": "127.0.0.1",
+      "port": 62789,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "127.0.0.1"
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "direct",
+      "protocol": "freedom",
+      "settings": {
+        "domainStrategy": "AsIs",
+        "redirect": "",
+        "noises": []
+      }
     },
-    "stats": {},
-    "policy": {
-        "levels": {
-            "0": {
-                "statsUserUplink": true,
-                "statsUserDownlink": true,
-                "statsInboundUplink": true,
-                "statsInboundDownlink": true
-            }
-        },
-        "system": {
-            "statsInboundUplink": true,
-            "statsInboundDownlink": true
-        }
+    {
+      "tag": "blocked",
+      "protocol": "blackhole",
+      "settings": {}
+    }
+  ],
+  "policy": {
+    "levels": {
+      "0": {
+        "statsUserDownlink": true,
+        "statsUserUplink": true
+      }
     },
-    "api": {
-        "services": ["StatsService"],
-        "tag": "api"
-    },
-    "inbounds": [
-        {
-            "listen": "127.0.0.1",
-            "port": 10085,
-            "protocol": "dokodemo-door",
-            "settings": {"address": "127.0.0.1", "network": "tcp"},
-            "tag": "api"
-        }
-    ],
-    "outbounds": []
+    "system": {
+      "statsInboundDownlink": true,
+      "statsInboundUplink": true,
+      "statsOutboundDownlink": false,
+      "statsOutboundUplink": false
+    }
+  },
+  "routing": {
+    "domainStrategy": "AsIs",
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": [
+          "api"
+        ],
+        "outboundTag": "api"
+      },
+      {
+        "type": "field",
+        "outboundTag": "blocked",
+        "ip": [
+          "geoip:private"
+        ]
+      },
+      {
+        "type": "field",
+        "outboundTag": "blocked",
+        "protocol": [
+          "bittorrent"
+        ]
+      }
+    ]
+  },
+  "stats": {}
 }
 EOF
     fi
