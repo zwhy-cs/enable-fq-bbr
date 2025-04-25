@@ -1167,8 +1167,8 @@ view_stats() {
             port=$(jq -r ".inbounds[$i].port // \"\"" ${CONFIG_FILE})
             if [[ -n "$tag" ]]; then
                 # 查询入站流量
-                uplink=$(xray api statsquery --server="127.0.0.1:62789" "inbound>>>${tag}>>>traffic>>>uplink" | jq -r '.stat.value // 0')
-                downlink=$(xray api statsquery --server="127.0.0.1:62789" "inbound>>>${tag}>>>traffic>>>downlink" | jq -r '.stat.value // 0')
+                uplink=$(xray api statsquery --server="127.0.0.1:62789" "inbound>>>${tag}>>>traffic" | jq -r '.stat[] | select(.name | test("uplink$")) | .value // 0')
+                downlink=$(xray api statsquery --server="127.0.0.1:62789" "inbound>>>${tag}>>>traffic" | jq -r '.stat[] | select(.name | test("downlink$")) | .value // 0')
                 uplink_gb=$(awk "BEGIN{printf \"%.2f\",$uplink/1024/1024/1024}")
                 downlink_gb=$(awk "BEGIN{printf \"%.2f\",$downlink/1024/1024/1024}")
                 echo -e "${YELLOW}[$i] 协议: $protocol, 端口: $port, tag: $tag${PLAIN}"
