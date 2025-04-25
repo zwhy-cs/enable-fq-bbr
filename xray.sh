@@ -80,6 +80,20 @@ install_update_xray() {
         "error": "${LOG_DIR}/error.log"
     },
     "stats": {},
+    "policy": {
+        "levels": {
+            "0": {
+                "statsUserUplink": true,
+                "statsUserDownlink": true,
+                "statsInboundUplink": true,
+                "statsInboundDownlink": true
+            }
+        },
+        "system": {
+            "statsInboundUplink": true,
+            "statsInboundDownlink": true
+        }
+    },
     "api": {
         "services": ["StatsService"],
         "tag": "api"
@@ -89,7 +103,7 @@ install_update_xray() {
             "listen": "127.0.0.1",
             "port": 10085,
             "protocol": "dokodemo-door",
-            "settings": {"address": "127.0.0.1"},
+            "settings": {"address": "127.0.0.1", "network": "tcp"},
             "tag": "api"
         }
     ],
