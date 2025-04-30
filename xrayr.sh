@@ -11,9 +11,10 @@ echo "1. 安装 XrayR"
 echo "2. 重启 XrayR"
 echo "3. 添加节点"
 echo "4. 删除节点" # 新增选项
-echo "5. 退出"
-echo "6. 一键删除所有XrayR相关文件和配置" # 原来的 5 变为 6
+echo "5. 一键删除所有XrayR相关文件和配置" # 原来的 5 变为 6
+echo "6. 查看当前XrayR配置" # 新增查看配置选项
 echo "--------------------------------------------------"
+echo "7. 退出" # 退出移到最后一行
 read -p "请选择操作： " choice
 
 # 安装 XrayR
@@ -282,9 +283,16 @@ delete_node() {
     fi
 }
 
-
-
-
+# 查看 config.yml 配置内容
+view_config() {
+    echo "---------------- 当前 XrayR 配置 ----------------"
+    if [ -f "$CONFIG_FILE" ]; then
+        cat "$CONFIG_FILE"
+    else
+        echo "未找到配置文件 $CONFIG_FILE"
+    fi
+    echo "--------------------------------------------------"
+}
 
 # 一键删除所有XrayR相关文件和配置
 remove_all_xrayr() {
@@ -324,12 +332,19 @@ case $choice in
     4) # 新增的删除选项
         delete_node
         ;;
-    5) # 原来的 4 变为 5
-        echo "退出脚本。"
-        exit 0
+    5)
+        # 保留原5，实际已无用，可提示无效
+        echo "无效选项，请重新输入。"
         ;;
     6) # 原来的 5 变为 6
         remove_all_xrayr
+        ;;
+    7) # 新增的查看配置选项
+        view_config
+        ;;
+    8) # 退出移到最后一行
+        echo "退出脚本。"
+        exit 0
         ;;
     *)
         echo "无效选项，退出脚本。"
