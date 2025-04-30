@@ -178,162 +178,132 @@ EOF
     restart_xrayr
 }
 
-# --- 新增：删除节点功能 ---
 delete_node() {
-    echo "请输入要删除的节点信息："
-    read -p "节点 ID (NodeID): " node_id_to_delete
-    # 验证 NodeID
-    if [[ -z "$node_id_to_delete" ]]; then
-        echo "错误：节点 ID 不能为空。"
-        return 1
-    fi
-    read -p "节点类型 (NodeType: V2ray/Vmess/Vless/Shadowsocks/Trojan): " node_type_to_delete
-    # 验证 NodeType
-    case "$node_type_to_delete" in
-        V2ray|Vmess|Vless|Shadowsocks|Trojan)
-            ;; # 类型有效
-        *)
-            echo "错误：无效的节点类型 '$node_type_to_delete'。请输入 V2ray, Vmess, Vless, Shadowsocks 或 Trojan。"
-            return 1
-            ;;
-    esac
+    echo "----------------------------------------"
+    read -p "请输入要删除的节点的 NodeID: " TARGET_NODE_ID
+    read -p "请输入要删除的节点的类型 (NodeType: V2ray/Vmess/Vless/Shadowsocks/Trojan): " TARGET_NODE_TYPE
 
-    echo "正在查找并准备删除节点 (ID: $node_id_to_delete, Type: $node_type_to_delete)..."
-
-    # 检查配置文件是否存在
-    if [ ! -f "$CONFIG_FILE" ]; then
-        echo "错误：配置文件 $CONFIG_FILE 不存在。"
-        return 1
+    if [[ -z "$TARGET_NODE_ID" ]] || [[ -z "$TARGET_NODE_TYPE" ]]; then
+        echo "错误：NodeID 和 NodeType 不能为空。"
+        return
     fi
 
-    # 使用 awk 处理 YAML 文件来删除匹配的节点块
-    # 逻辑：
-    # 1. 逐行读取文件。
-    # 2. 当遇到以 '  - PanelType:' 开头的行时，认为是一个新的节点块的开始。
-    # 3. 处理上一个缓存的块：检查缓存块中是否同时包含目标 NodeID 和 NodeType。
-    # 4. 如果上一个块不包含目标 ID 和 Type，则打印该块。
-    # 5. 开始缓存新的块。
-    # 6. 如果当前行不是块的开始，且我们在一个块内，则将该行追加到缓存。
-    # 7. 如果当前行不在块内（例如文件头部的配置），则直接打印。
-    # 8. 文件结束时，处理最后一个缓存的块。
+    # 转换为小写以便传递给 awk (虽然 awk 内部也会转)
+    TARGET_NODE_TYPE_LOWER=$(echo "$TARGET_NODE_TYPE" | tr '[:upper:]' '[:lower:]')
+    export TARGET_NODE_ID
+    export TARGET_NODE_TYPE # 传递原始大小写或小写均可，awk内部会处理
 
-    local temp_file=$(mktemp) # 创建临时文件
-    local found_node=0 # 标记是否找到了要删除的节点
+    echo "正在查找并准备删除节点 (ID: ${TARGET_NODE_ID}, Type: ${TARGET_NODE_TYPE})..."
 
-    # 将 NodeID 和 NodeType 导出为环境变量，以便 awk 可以访问
-    export TARGET_NODE_ID="$node_id_to_delete"
-    export TARGET_NODE_TYPE="$node_type_to_delete"
+    local temp_file=$(mktemp)
+    local stderr_file=$(mktemp) # 创建一个临时文件来捕获 stderr
+    local found_node=0 # 初始化为 0 (未找到)
 
-
+    # --- 修改后的 AWK 调用和 stderr 处理 ---
+    # 将 awk 的标准输出重定向到 temp_file, 标准错误重定向到 stderr_file
     awk '
     # 函数：处理缓存的块
     function process_buffer() {
         if (buffer != "") {
-            # ID 模式保持不变
             id_pattern = "^[[:space:]]*NodeID:[[:space:]]*" ENVIRON["TARGET_NODE_ID"] "[[:space:]]*$"
-            # NodeType 模式 (修正版): 匹配键值对，允许后面有空格、注释或直接是行尾
             target_type_lower = tolower(ENVIRON["TARGET_NODE_TYPE"])
-            # 修正后的模式：匹配到类型值后，允许后面是空格+注释(#...) 或者 直接是行尾(可能带空格)
             type_pattern_lower = "^[[:space:]]*nodetype:[[:space:]]*\"?" target_type_lower "\"?([[:space:]]+#.*|[[:space:]]*$)"
 
             split(buffer, lines, "\n")
             match_id = 0
             match_type = 0
 
-            # --- DEBUG START (可以保留或删除) ---
-            # print "--- Checking Buffer ---" > "/dev/stderr"
-            # print buffer > "/dev/stderr"
-            # print "Target ID: [" ENVIRON["TARGET_NODE_ID"] "], Target Type (lower): [" target_type_lower "]" > "/dev/stderr"
-            # print "ID Pattern: [" id_pattern "]" > "/dev/stderr"
-            # print "Type Pattern (lower): [" type_pattern_lower "]" > "/dev/stderr"
-            # --- DEBUG END ---
-
             for (i in lines) {
                 current_line = lines[i]
                 current_line_lower = tolower(current_line)
-                # --- DEBUG START (可以保留或删除) ---
-                # print "  Line " i ": [" current_line "]" > "/dev/stderr"
-                # --- DEBUG END ---
-
-                if (current_line ~ id_pattern) {
-                    # --- DEBUG START (可以保留或删除) ---
-                    # print "    -> ID Matched!" > "/dev/stderr"
-                    # --- DEBUG END ---
-                    match_id = 1
-                }
-                # 使用修正后的 type_pattern_lower 进行匹配
-                if (current_line_lower ~ type_pattern_lower) {
-                     # --- DEBUG START (可以保留或删除) ---
-                     # print "    -> Type Matched (case-insensitive)!" > "/dev/stderr"
-                     # --- DEBUG END ---
-                     match_type = 1
-                }
+                if (current_line ~ id_pattern) { match_id = 1 }
+                if (current_line_lower ~ type_pattern_lower) { match_type = 1 }
             }
 
             if (match_id && match_type) {
                  found_node_flag = 1
-                 # --- DEBUG START (可以保留或删除) ---
-                 # print ">>> Block Matched! Deleting." > "/dev/stderr"
-                 # --- DEBUG END ---
                  # 匹配成功，不打印 buffer (即删除)
             } else {
-                 # --- DEBUG START (可以保留或删除) ---
-                 # print "<<< Block Not Matched. Keeping." > "/dev/stderr"
-                 # --- DEBUG END ---
                  print buffer # 块不匹配，打印到标准输出 (即临时文件)
             }
-            # --- DEBUG START (可以保留或删除) ---
-            # print "--- Buffer Processed ---" > "/dev/stderr"
-            # --- DEBUG END ---
             buffer = "" # 清空缓存
         }
     }
-
-    # 主处理逻辑 (保持不变)
+    # 主处理逻辑
     BEGIN { buffer = ""; in_block = 0; found_node_flag = 0 }
     /^  - PanelType:/ { process_buffer(); buffer = $0; in_block = 1; next }
     in_block { buffer = buffer "\n" $0; next }
-    { print }
+    { print } # 打印非节点块内容
     END {
-        process_buffer()
+        process_buffer() # 处理最后一个块
+        # 将找到标记打印到 stderr
         if (found_node_flag) { print "__NODE_FOUND_AND_DELETED__" > "/dev/stderr" }
         else { print "__NODE_NOT_FOUND__" > "/dev/stderr" }
     }
-    ' "$CONFIG_FILE" > "$temp_file" 2> >(tee /dev/tty | grep -q "__NODE_FOUND_AND_DELETED__" && found_node=1)
+    ' "$CONFIG_FILE" > "$temp_file" 2> "$stderr_file"
+    # --- AWK 调用结束 ---
 
-# --- 后续的 if [ "$found_node" -eq 1 ]; then ... else ... fi 不变 ---
+    # --- 检查 stderr 文件内容 ---
+    if grep -q "__NODE_FOUND_AND_DELETED__" "$stderr_file"; then
+        found_node=1
+    fi
+    # (可选) 打印 awk 的 stderr 用于调试
+    # cat "$stderr_file" >&2
+
+    # 清理临时 stderr 文件
+    rm "$stderr_file"
+    # --- 检查结束 ---
 
 
-
+    # --- 后续逻辑不变 ---
     if [ "$found_node" -eq 1 ]; then
-        echo "找到并已从临时配置中移除节点 (ID: $node_id_to_delete, Type: $node_type_to_delete)。"
-        # 可选：显示更改前后的差异
-        # echo "配置更改预览 (diff):"
-        # diff -u "$CONFIG_FILE" "$temp_file"
+        echo "已在配置文件中找到匹配的节点。"
+        # 显示将被删除的节点内容 (从原始文件中提取，因为 awk 没输出它)
+        echo "--- 将要删除的节点内容 ---"
+        awk '
+        function process_buffer() {
+            if (buffer != "") {
+                id_pattern = "^[[:space:]]*NodeID:[[:space:]]*" ENVIRON["TARGET_NODE_ID"] "[[:space:]]*$"
+                target_type_lower = tolower(ENVIRON["TARGET_NODE_TYPE"])
+                type_pattern_lower = "^[[:space:]]*nodetype:[[:space:]]*\"?" target_type_lower "\"?([[:space:]]+#.*|[[:space:]]*$)"
+                split(buffer, lines, "\n"); match_id = 0; match_type = 0
+                for (i in lines) {
+                    current_line = lines[i]; current_line_lower = tolower(current_line)
+                    if (current_line ~ id_pattern) { match_id = 1 }
+                    if (current_line_lower ~ type_pattern_lower) { match_type = 1 }
+                }
+                if (match_id && match_type) { print buffer } # 只打印匹配的块
+                buffer = ""
+            }
+        }
+        BEGIN { buffer = ""; in_block = 0 }
+        /^  - PanelType:/ { process_buffer(); buffer = $0; in_block = 1; next }
+        in_block { buffer = buffer "\n" $0; next }
+        END { process_buffer() }
+        ' "$CONFIG_FILE"
+        echo "---------------------------"
 
-        read -p "确认要应用更改并覆盖原配置文件吗？(yes/no): " confirm_delete
-        if [[ "$confirm_delete" == "yes" ]]; then
-            # 备份原配置文件
-            cp "$CONFIG_FILE" "$CONFIG_FILE.bak_$(date +%Y%m%d_%H%M%S)"
-            echo "原配置文件已备份为 $CONFIG_FILE.bak_..."
-            # 用临时文件覆盖原文件
+        read -p "确认删除此节点吗? (y/N): " confirm
+        if [[ "$confirm" =~ ^[Yy]$ ]]; then
             mv "$temp_file" "$CONFIG_FILE"
-            echo "节点已成功删除。"
-            # 重启 XrayR 使配置生效
-            restart_xrayr
+            echo "节点已从 $CONFIG_FILE 删除。"
+            read -p "是否需要重启 XrayR 服务以应用更改? (y/N): " restart_confirm
+            if [[ "$restart_confirm" =~ ^[Yy]$ ]]; then
+                systemctl restart xrayr
+                echo "XrayR 服务已重启。"
+            else
+                echo "请稍后手动重启 XrayR 服务: systemctl restart xrayr"
+            fi
         else
-            echo "操作已取消，未修改配置文件。"
-            rm "$temp_file" # 删除临时文件
+            echo "操作已取消。"
+            rm "$temp_file"
         fi
     else
-        echo "未在配置文件中找到匹配的节点 (ID: $node_id_to_delete, Type: $node_type_to_delete)。"
-        rm "$temp_file" # 删除临时文件
+        echo "未在配置文件中找到匹配的节点 (ID: ${TARGET_NODE_ID}, Type: ${TARGET_NODE_TYPE})。"
+        rm "$temp_file"
     fi
-
-    # 清理环境变量
-    unset TARGET_NODE_ID
-    unset TARGET_NODE_TYPE
 }
+
 
 
 # 一键删除所有XrayR相关文件和配置
