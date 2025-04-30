@@ -224,36 +224,69 @@ delete_node() {
     export TARGET_NODE_ID="$node_id_to_delete"
     export TARGET_NODE_TYPE="$node_type_to_delete"
 
+# --- 在 delete_node 函数中，替换掉原来的 awk ... 部分 ---
+
+    # 使用带有详细调试输出的 awk 脚本
     awk '
     # 函数：处理缓存的块
     function process_buffer() {
         if (buffer != "") {
-            # 检查缓存的块是否包含目标 NodeID 和 NodeType
-            # 使用精确匹配，确保值正确且前面有正确的键
+            # 使用更灵活的匹配: 允许值前后有空格，允许 NodeType 值有可选的引号
             id_pattern = "^[[:space:]]*NodeID:[[:space:]]*" ENVIRON["TARGET_NODE_ID"] "[[:space:]]*$"
-            type_pattern = "^[[:space:]]*NodeType:[[:space:]]*" ENVIRON["TARGET_NODE_TYPE"] "[[:space:]]*$"
+            # NodeType 模式: 匹配可选引号 (\"?) 和前后空格, 并转为小写比较
+            target_type_lower = tolower(ENVIRON["TARGET_NODE_TYPE"])
+            type_pattern_lower = "^[[:space:]]*nodetype:[[:space:]]*\"?" target_type_lower "\"[[:space:]]*$"
 
             # 分割 buffer 检查每一行
             split(buffer, lines, "\n")
             match_id = 0
             match_type = 0
+
+            # --- DEBUG START ---
+            print "--- Checking Buffer ---" > "/dev/stderr"
+            print buffer > "/dev/stderr"
+            print "Target ID: [" ENVIRON["TARGET_NODE_ID"] "], Target Type (lower): [" target_type_lower "]" > "/dev/stderr"
+            print "ID Pattern: [" id_pattern "]" > "/dev/stderr"
+            print "Type Pattern (lower): [" type_pattern_lower "]" > "/dev/stderr"
+            # --- DEBUG END ---
+
             for (i in lines) {
-                if (lines[i] ~ id_pattern) {
+                current_line = lines[i]
+                current_line_lower = tolower(current_line)
+                # --- DEBUG START ---
+                print "  Line " i ": [" current_line "]" > "/dev/stderr"
+                # --- DEBUG END ---
+
+                if (current_line ~ id_pattern) {
+                    # --- DEBUG START ---
+                    print "    -> ID Matched!" > "/dev/stderr"
+                    # --- DEBUG END ---
                     match_id = 1
                 }
-                if (lines[i] ~ type_pattern) {
-                    match_type = 1
+                if (current_line_lower ~ type_pattern_lower) {
+                     # --- DEBUG START ---
+                     print "    -> Type Matched (case-insensitive)!" > "/dev/stderr"
+                     # --- DEBUG END ---
+                     match_type = 1
                 }
             }
 
             if (match_id && match_type) {
                  # 块匹配，不打印（即删除），设置找到标记
                  found_node_flag = 1
-                 # print "DEBUG: Deleting block for NodeID=" ENVIRON["TARGET_NODE_ID"] ", NodeType=" ENVIRON["TARGET_NODE_TYPE"] > "/dev/stderr"
+                 # --- DEBUG START ---
+                 print ">>> Block Matched! Deleting." > "/dev/stderr"
+                 # --- DEBUG END ---
             } else {
                  # 块不匹配，打印它
-                 print buffer
+                 # --- DEBUG START ---
+                 print "<<< Block Not Matched. Keeping." > "/dev/stderr"
+                 # --- DEBUG END ---
+                 print buffer # 打印到标准输出 (即临时文件)
             }
+            # --- DEBUG START ---
+            print "--- Buffer Processed ---" > "/dev/stderr"
+            # --- DEBUG END ---
             buffer = "" # 清空缓存
         }
     }
@@ -263,10 +296,16 @@ delete_node() {
         buffer = ""      # 初始化块缓存
         in_block = 0     # 标记是否在节点块内
         found_node_flag = 0 # 标记是否找到了节点 (在awk内部使用)
+        # --- DEBUG START ---
+        print "--- AWK Script Started ---" > "/dev/stderr"
+        # --- DEBUG END ---
     }
 
     # 匹配节点块的开始行 (注意开头的两个空格和连字符)
     /^  - PanelType:/ {
+        # --- DEBUG START ---
+        # print "DEBUG: Found block start: " $0 > "/dev/stderr"
+        # --- DEBUG END ---
         process_buffer() # 处理上一个块
         buffer = $0      # 开始缓存新块
         in_block = 1     # 进入块标记
@@ -275,25 +314,35 @@ delete_node() {
 
     # 如果在块内
     in_block {
+        # 简单的块内行处理逻辑
         buffer = buffer "\n" $0 # 将当前行追加到缓存
         next                 # 跳过默认打印动作，继续下一行
     }
 
     # 如果不在块内 (例如文件头部的配置)，直接打印
-    { print }
+    { print } # 打印到标准输出 (即临时文件)
 
     # 文件结束时，处理最后一个缓存的块
     END {
+        # --- DEBUG START ---
+        # print "DEBUG: End of file reached." > "/dev/stderr"
+        # --- DEBUG END ---
         process_buffer()
-        # 将找到标记传递给shell (通过打印特殊标记)
+        # 将找到标记传递给shell (通过打印特殊标记到 stderr)
         if (found_node_flag) {
             print "__NODE_FOUND_AND_DELETED__" > "/dev/stderr"
+        } else {
+            print "__NODE_NOT_FOUND__" > "/dev/stderr" # 添加未找到标记
         }
+        # --- DEBUG START ---
+        print "--- AWK Script Finished ---" > "/dev/stderr"
+        # --- DEBUG END ---
     }
-    ' "$CONFIG_FILE" > "$temp_file" 2> >(grep -q "__NODE_FOUND_AND_DELETED__" && found_node=1) # 将awk的输出重定向到临时文件，错误输出用于检测是否找到节点
+    ' "$CONFIG_FILE" > "$temp_file" 2> >(tee /dev/tty | grep -q "__NODE_FOUND_AND_DELETED__" && found_node=1)
+    # 使用 tee 将 stderr 同时输出到终端(tty)和管道给 grep
 
-    # 检查 awk 是否成功执行 (虽然 awk 通常返回 0，但检查文件大小变化更可靠)
-    # 或者检查我们设置的 found_node 标记
+# --- 后续的 if [ "$found_node" -eq 1 ]; then ... else ... fi 不变 ---
+
 
     if [ "$found_node" -eq 1 ]; then
         echo "找到并已从临时配置中移除节点 (ID: $node_id_to_delete, Type: $node_type_to_delete)。"
