@@ -128,6 +128,7 @@ EOF
 }
 
 # 删除节点
+# 删除节点
 delete_node() {
     # 检查配置文件是否存在
     if [ ! -f "$CONFIG_FILE" ]; then
@@ -142,8 +143,7 @@ delete_node() {
     # 要求用户输入要删除的节点ID
     read -p "请输入要删除的节点ID: " node_id
     
-    # 使用简化的方法进行节点删除
-    # 使用grep提取包含特定NodeID的行号
+    # 查找包含NodeID的行
     node_line=$(grep -n "NodeID: *$node_id" "$CONFIG_FILE" | cut -d: -f1)
     
     if [ -z "$node_line" ]; then
@@ -151,10 +151,23 @@ delete_node() {
         return 1
     fi
     
-    # 找到节点的起始行（往上寻找最近的包含PanelType的行）
+    # 查找Nodes:所在的行
+    nodes_line=$(grep -n "^Nodes:" "$CONFIG_FILE" | cut -d: -f1)
+    
+    if [ -z "$nodes_line" ]; then
+        echo "找不到Nodes:部分，配置文件格式可能不正确！"
+        return 1
+    fi
+    
+    # 确定节点配置开始行（ApiConfig所在行或前一行）
     start_line=0
-    for (( i=$node_line; i>=1; i-- )); do
-        if grep -q "PanelType" <(sed "${i}q;d" "$CONFIG_FILE"); then
+    for (( i=$node_line; i>=$nodes_line; i-- )); do
+        line_content=$(sed "${i}q;d" "$CONFIG_FILE")
+        # 查找ApiConfig或PanelType作为节点开始标记
+        if [[ "$line_content" == *"ApiConfig:"* || "$line_content" == *"PanelType:"* ]]; then
+            start_line=$i
+            break
+        elif [[ "$i" -eq "$((nodes_line+1))" ]]; then  # 如果是Nodes:的下一行
             start_line=$i
             break
         fi
@@ -165,22 +178,37 @@ delete_node() {
         return 1
     fi
     
-    # 找到节点的结束行（往下查找到下一个包含PanelType的行，或者文件末尾）
-    end_line=$(grep -n "PanelType" "$CONFIG_FILE" | awk -v start=$start_line '$1 > start {print $1; exit}' | cut -d: -f1)
+    # 查找下一个节点开始的标志或文件结束
+    end_line=0
+    total_lines=$(wc -l < "$CONFIG_FILE")
     
-    if [ -z "$end_line" ]; then
-        # 如果没有找到下一个节点，则使用文件的最后一行
-        end_line=$(wc -l < "$CONFIG_FILE")
-    else
-        # 将行号转换为数字并减一，得到前一个节点的结束行
-        end_line=$((end_line - 1))
+    for (( i=$node_line+1; i<=$total_lines; i++ )); do
+        line_content=$(sed "${i}q;d" "$CONFIG_FILE")
+        # 查找下一个节点的开始标记(ApiConfig或PanelType)
+        if [[ "$line_content" == *"ApiConfig:"* && "$line_content" != *"RuleListPath:"* ]]; then
+            # 前一行作为当前节点的结束
+            end_line=$((i-1))
+            break
+        fi
+    done
+    
+    # 如果没找到下一个节点的开始，则到文件结束
+    if [ $end_line -eq 0 ]; then
+        end_line=$total_lines
     fi
     
     # 创建临时文件
     temp_file="${CONFIG_FILE}.tmp"
     
-    # 删除指定范围的行，并将结果写入临时文件
-    sed -e "${start_line},${end_line}d" "$CONFIG_FILE" > "$temp_file"
+    # 提取需要保留的部分（删除节点的行）
+    {
+        # 保留节点前的部分
+        sed -n "1,${start_line}p" "$CONFIG_FILE" | sed '$d'
+        # 保留节点后的部分
+        if [ $end_line -lt $total_lines ]; then
+            sed -n "$((end_line+1)),${total_lines}p" "$CONFIG_FILE"
+        fi
+    } > "$temp_file"
     
     # 将临时文件移动到原配置文件
     mv "$temp_file" "$CONFIG_FILE"
