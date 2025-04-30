@@ -329,20 +329,16 @@ case $choice in
     3)
         add_node
         ;;
-    4) # 新增的删除选项
+    4)
         delete_node
         ;;
     5)
-        # 保留原5，实际已无用，可提示无效
-        echo "无效选项，请重新输入。"
-        ;;
-    6) # 原来的 5 变为 6
         remove_all_xrayr
         ;;
-    7) # 新增的查看配置选项
+    6)
         view_config
         ;;
-    8) # 退出移到最后一行
+    7)
         echo "退出脚本。"
         exit 0
         ;;
