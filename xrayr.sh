@@ -128,7 +128,6 @@ EOF
 }
 
 # 删除节点
-# 删除节点
 delete_node() {
     # 检查配置文件是否存在
     if [ ! -f "$CONFIG_FILE" ]; then
@@ -140,14 +139,38 @@ delete_node() {
     cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
     echo "已备份配置文件到 ${CONFIG_FILE}.bak"
     
-    # 要求用户输入要删除的节点ID
+    # 要求用户输入要删除的节点信息
     read -p "请输入要删除的节点ID: " node_id
+    read -p "请输入节点类型 (V2ray/Vmess/Vless/Shadowsocks/Trojan): " node_type
     
-    # 查找包含NodeID的行
-    node_line=$(grep -n "NodeID: *$node_id" "$CONFIG_FILE" | cut -d: -f1)
+    # 查找同时包含NodeID和NodeType的区域
+    node_id_line=$(grep -n "NodeID: *$node_id" "$CONFIG_FILE" | cut -d: -f1)
     
-    if [ -z "$node_line" ]; then
+    if [ -z "$node_id_line" ]; then
         echo "未找到节点ID为 $node_id 的配置，请检查ID是否正确！"
+        return 1
+    fi
+    
+    # 检查该NodeID对应的NodeType是否匹配
+    node_type_found=false
+    for line in $node_id_line; do
+        # 获取NodeID所在行之后的几行，查找NodeType
+        node_type_line=$(tail -n +$line "$CONFIG_FILE" | grep -n "NodeType: *$node_type" | head -n 1 | cut -d: -f1)
+        if [ ! -z "$node_type_line" ]; then
+            # 计算NodeType实际所在行号
+            actual_type_line=$((line + node_type_line - 1))
+            # 检查该NodeType是否在合理范围内（通常NodeType应该在NodeID附近几行内）
+            if [ $((actual_type_line - line)) -lt 10 ]; then
+                node_type_found=true
+                # 使用找到的NodeID行
+                node_line=$line
+                break
+            fi
+        fi
+    done
+    
+    if [ "$node_type_found" = false ]; then
+        echo "未找到节点ID为 $node_id 且类型为 $node_type 的配置，请检查信息是否正确！"
         return 1
     fi
     
@@ -159,15 +182,12 @@ delete_node() {
         return 1
     fi
     
-    # 确定节点配置开始行（ApiConfig所在行或前一行）
+    # 确定节点配置开始行（节点块的开始标记行）
     start_line=0
     for (( i=$node_line; i>=$nodes_line; i-- )); do
         line_content=$(sed "${i}q;d" "$CONFIG_FILE")
-        # 查找ApiConfig或PanelType作为节点开始标记
-        if [[ "$line_content" == *"ApiConfig:"* || "$line_content" == *"PanelType:"* ]]; then
-            start_line=$i
-            break
-        elif [[ "$i" -eq "$((nodes_line+1))" ]]; then  # 如果是Nodes:的下一行
+        # 查找该节点块开始的标记
+        if [[ "$line_content" =~ ^[[:space:]]*- || "$line_content" =~ ^[[:space:]]*PanelType: ]]; then
             start_line=$i
             break
         fi
@@ -184,9 +204,9 @@ delete_node() {
     
     for (( i=$node_line+1; i<=$total_lines; i++ )); do
         line_content=$(sed "${i}q;d" "$CONFIG_FILE")
-        # 查找下一个节点的开始标记(ApiConfig或PanelType)
-        if [[ "$line_content" == *"ApiConfig:"* && "$line_content" != *"RuleListPath:"* ]]; then
-            # 前一行作为当前节点的结束
+        # 查找下一个节点的开始标记
+        if [[ "$line_content" =~ ^[[:space:]]*- ]]; then
+            # 找到下一个节点的开始行
             end_line=$((i-1))
             break
         fi
@@ -197,13 +217,15 @@ delete_node() {
         end_line=$total_lines
     fi
     
+    echo "将删除从第 $start_line 行到第 $end_line 行的节点配置"
+    
     # 创建临时文件
     temp_file="${CONFIG_FILE}.tmp"
     
     # 提取需要保留的部分（删除节点的行）
     {
         # 保留节点前的部分
-        sed -n "1,${start_line}p" "$CONFIG_FILE" | sed '$d'
+        sed -n "1,$((start_line-1))p" "$CONFIG_FILE"
         # 保留节点后的部分
         if [ $end_line -lt $total_lines ]; then
             sed -n "$((end_line+1)),${total_lines}p" "$CONFIG_FILE"
@@ -213,7 +235,7 @@ delete_node() {
     # 将临时文件移动到原配置文件
     mv "$temp_file" "$CONFIG_FILE"
     
-    echo "成功删除节点ID为 $node_id 的配置！"
+    echo "成功删除节点ID为 $node_id 类型为 $node_type 的配置！"
     
     # 重启XrayR使配置生效
     restart_xrayr
