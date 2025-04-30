@@ -16,7 +16,10 @@ read -p "请选择操作： " choice
 install_xrayr() {
     echo "正在安装 XrayR..."
     bash <(curl -Ls https://raw.githubusercontent.com/XrayR-project/XrayR-release/master/install.sh)
-    echo "XrayR 安装完成。"
+    # 修改 config.yml 配置文件
+    echo "正在初始化 config.yml 文件..."
+    echo -e "Log:\n  Level: warning\n  AccessPath: ''\n  ErrorPath: ''\nDnsConfigPath: '/etc/XrayR/dns.json'\nRouteConfigPath: '/etc/XrayR/route.json'\nInboundConfigPath: '/etc/XrayR/custom_inbound.json'\nOutboundConfigPath: '/etc/XrayR/custom_outbound.json'\nConnectionConfig:\n  Handshake: 4\n  ConnIdle: 30\n  UplinkOnly: 2\n  DownlinkOnly: 4\n  BufferSize: 64\nNodes:" > $CONFIG_FILE
+    echo "XrayR 安装并初始化配置文件完成。"
 }
 
 # 重启 XrayR
@@ -30,7 +33,7 @@ restart_xrayr() {
 add_node() {
     echo "请输入要添加的节点信息："
     read -p "节点 ID: " node_id
-    read -p "节点类型 (V2ray/Vmess/Vless/Shadowsocks/Trojan): " node_type
+    read -p "选择节点类型 (V2ray/Vmess/Vless/Shadowsocks/Trojan): " node_type
     read -p "是否启用Reality (yes/no): " enable_reality
 
     # 根据是否启用Reality来设置其他参数
