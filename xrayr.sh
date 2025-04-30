@@ -135,6 +135,9 @@ delete_node() {
         return 1
     fi
     
+    # 备份原始配置文件
+    cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
+    echo "已备份配置文件到 ${CONFIG_FILE}.bak"
     
     # 要求用户输入要删除的节点ID
     read -p "请输入要删除的节点ID: " node_id
