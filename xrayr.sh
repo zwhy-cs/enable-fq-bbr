@@ -28,6 +28,66 @@ install_xrayr() {
     # 写入基础配置，如果文件已存在则覆盖（安装时通常需要初始化）
     echo -e "Log:\n  Level: warning # Log level: none, error, warning, info, debug\n  AccessPath: # /etc/XrayR/access.Log\n  ErrorPath: # /etc/XrayR/error.log\nDnsConfigPath: # /etc/XrayR/dns.json # Path to dns config, check https://xtls.github.io/config/dns.html for help\nRouteConfigPath: # /etc/XrayR/route.json # Path to route config, check https://xtls.github.io/config/routing.html for help\nInboundConfigPath: # /etc/XrayR/custom_inbound.json # Path to custom inbound config, check https://xtls.github.io/config/inbound.html for help\nOutboundConfigPath: # /etc/XrayR/custom_outbound.json # Path to custom outbound config, check https://xtls.github.io/config/outbound.html for help\nConnectionConfig:\n  Handshake: 4 # Handshake time limit, Second\n  ConnIdle: 30 # Connection idle time limit, Second\n  UplinkOnly: 2 # Time limit when the connection downstream is closed, Second\n  DownlinkOnly: 4 # Time limit when the connection is closed after the uplink is closed, Second\n  BufferSize: 64 # The internal cache size of each connection, kB\nNodes:" > $CONFIG_FILE
     echo "XrayR 安装并初始化配置文件完成。"
+
+    # 覆盖 route.json
+    cat > /etc/XrayR/route.json <<EOF
+{
+    "rules": [
+      {
+        "inboundTag": [
+          "dokodemo-in"
+        ],
+        "domain": [
+          "speed.cloudflare.com"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "inboundTag": [
+          "dokodemo-in"
+        ],
+        "outboundTag": "block"
+      }
+    ]
+}
+EOF
+
+    # 覆盖 custom_inbound.json
+    cat > /etc/XrayR/custom_inbound.json <<EOF
+[
+  {
+    "tag": "dokodemo-in",
+    "port": 443,
+    "protocol": "dokodemo-door",
+    "settings": {
+        "address": "127.0.0.1",
+        "port": 4431,  
+        "network": "tcp"
+    },
+    "sniffing": {
+        "enabled": true,
+        "destOverride": [
+            "tls"
+        ],
+        "routeOnly": true
+    }
+  }
+]
+EOF
+
+    # 覆盖 custom_outbound.json
+    cat > /etc/XrayR/custom_outbound.json <<EOF
+[
+  {
+    "protocol": "freedom",
+    "tag": "direct"
+  },
+  {
+    "protocol": "blackhole",
+    "tag": "block"
+  }
+]
+EOF
 }
 
 # 重启 XrayR
