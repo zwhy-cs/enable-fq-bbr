@@ -103,7 +103,6 @@ add_node() {
     # 注意：这里的缩进非常重要，YAML 对缩进敏感
     # 每个节点块以 '  - PanelType:' 开始（前面有两个空格）
     cat >> $CONFIG_FILE <<EOF
-
   - PanelType: "NewV2board" # Panel type: SSpanel, NewV2board, PMpanel, Proxypanel, V2RaySocks, GoV2Panel, BunPanel
     ApiConfig:
       ApiHost: "https://xb.zwhy.cc"
