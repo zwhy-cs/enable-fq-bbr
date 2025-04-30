@@ -103,7 +103,6 @@ add_node() {
     # 注意：这里的缩进非常重要，YAML 对缩进敏感
     # 每个节点块以 '  - PanelType:' 开始（前面有两个空格）
     cat >> $CONFIG_FILE <<EOF
-
   - PanelType: "NewV2board" # Panel type: SSpanel, NewV2board, PMpanel, Proxypanel, V2RaySocks, GoV2Panel, BunPanel
     ApiConfig:
       ApiHost: "https://xb.zwhy.cc"
@@ -188,88 +187,57 @@ delete_node() {
         return
     fi
 
-    TARGET_NODE_TYPE_LOWER=$(echo "$TARGET_NODE_TYPE" | tr '[:upper:]' '[:lower:]')
+    # 传递给 awk 的环境变量
     export TARGET_NODE_ID
-    export TARGET_NODE_TYPE
+    export TARGET_NODE_TYPE # awk 内部会处理大小写
 
     echo "正在查找并准备删除节点 (ID: ${TARGET_NODE_ID}, Type: ${TARGET_NODE_TYPE})..."
 
     local temp_file=$(mktemp)
-    local stderr_file=$(mktemp)
-    local found_node=0
+    local stderr_file=$(mktemp) # 临时文件捕获 stderr
+    local found_node=0 # 初始化为 0
 
-    # --- AWK 调用 (保持不变) ---
+    # --- AWK 处理配置文件，输出到临时文件，错误输出到 stderr_file ---
     awk '
-    # 函数：处理缓存的块
     function process_buffer() {
         if (buffer != "") {
             id_pattern = "^[[:space:]]*NodeID:[[:space:]]*" ENVIRON["TARGET_NODE_ID"] "[[:space:]]*$"
             target_type_lower = tolower(ENVIRON["TARGET_NODE_TYPE"])
             type_pattern_lower = "^[[:space:]]*nodetype:[[:space:]]*\"?" target_type_lower "\"?([[:space:]]+#.*|[[:space:]]*$)"
-
-            split(buffer, lines, "\n")
-            match_id = 0
-            match_type = 0
-
+            split(buffer, lines, "\n"); match_id = 0; match_type = 0
             for (i in lines) {
-                current_line = lines[i]
-                current_line_lower = tolower(current_line)
+                current_line = lines[i]; current_line_lower = tolower(current_line)
                 if (current_line ~ id_pattern) { match_id = 1 }
                 if (current_line_lower ~ type_pattern_lower) { match_type = 1 }
             }
-
-            if (match_id && match_type) {
-                 found_node_flag = 1
-                 # 匹配成功，不打印 buffer (即删除)
-            } else {
-                 print buffer # 块不匹配，打印到标准输出 (即临时文件)
-            }
-            buffer = "" # 清空缓存
+            if (match_id && match_type) { found_node_flag = 1 } else { print buffer }
+            buffer = ""
         }
     }
-    # 主处理逻辑
     BEGIN { buffer = ""; in_block = 0; found_node_flag = 0 }
     /^  - PanelType:/ { process_buffer(); buffer = $0; in_block = 1; next }
     in_block { buffer = buffer "\n" $0; next }
-    { print } # 打印非节点块内容
+    { print }
     END {
-        process_buffer() # 处理最后一个块
-        # 将找到标记打印到 stderr
+        process_buffer()
         if (found_node_flag) { print "__NODE_FOUND_AND_DELETED__" > "/dev/stderr" }
         else { print "__NODE_NOT_FOUND__" > "/dev/stderr" }
     }
     ' "$CONFIG_FILE" > "$temp_file" 2> "$stderr_file"
-    local awk_exit_status=$? # 捕获 awk 退出状态
-    # --- AWK 调用结束 ---
+    # --- AWK 结束 ---
 
-    # --- 增加详细调试 ---
-    echo "--- DEBUG: AWK Exit Status: $awk_exit_status ---" >&2
-    echo "--- DEBUG: Content of stderr_file ($stderr_file): ---" >&2
-    cat "$stderr_file" >&2 # 直接打印 stderr 文件的内容到终端
-    echo "--- DEBUG: End of stderr_file content ---" >&2
-
-    echo "--- DEBUG: Running: grep -q \"__NODE_FOUND_AND_DELETED__\" \"$stderr_file\" ---" >&2
-    grep -q "__NODE_FOUND_AND_DELETED__" "$stderr_file"
-    local grep_exit_status=$? # 捕获 grep 退出状态
-    echo "--- DEBUG: grep exit status: $grep_exit_status (0 means found, 1 means not found) ---" >&2
-
-    if [ "$grep_exit_status" -eq 0 ]; then
-        echo "--- DEBUG: grep found the marker. Setting found_node=1 ---" >&2
+    # --- 检查 stderr 文件内容 ---
+    if grep -q "__NODE_FOUND_AND_DELETED__" "$stderr_file"; then
         found_node=1
-    else
-        echo "--- DEBUG: grep did NOT find the marker or an error occurred. found_node remains 0 ---" >&2
     fi
-    # --- 调试结束 ---
+    rm "$stderr_file" # 清理 stderr 文件
+    # --- 检查结束 ---
 
-    # 清理临时 stderr 文件
-    rm "$stderr_file"
-
-    # --- 后续逻辑 (增加一个最终检查) ---
-    echo "--- DEBUG: Final value of found_node before if: $found_node ---" >&2
+    # --- 根据是否找到节点执行操作 ---
     if [ "$found_node" -eq 1 ]; then
         echo "已在配置文件中找到匹配的节点。"
-        # ... (显示和确认删除逻辑不变) ...
         echo "--- 将要删除的节点内容 ---"
+        # 再次用 awk 仅打印匹配的块以供预览
         awk '
         function process_buffer() {
             if (buffer != "") {
@@ -306,16 +274,14 @@ delete_node() {
             fi
         else
             echo "操作已取消。"
-            rm "$temp_file"
+            rm "$temp_file" # 取消操作，删除临时文件
         fi
-        # --- 结束成功路径 ---
     else
-        # --- 失败路径 ---
         echo "未在配置文件中找到匹配的节点 (ID: ${TARGET_NODE_ID}, Type: ${TARGET_NODE_TYPE})。"
-        rm "$temp_file"
-        # --- 结束失败路径 ---
+        rm "$temp_file" # 未找到节点，删除临时文件
     fi
 }
+
 
 
 
