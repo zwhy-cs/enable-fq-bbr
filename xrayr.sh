@@ -142,7 +142,7 @@ add_node() {
             return 1
         fi
         # 用 sed 替换 custom_inbound.json 里的 "port": xxx
-        sed -i '/"address": "127.0.0.1",/{n;s/"port": *[0-9]\\+/"port": '"$vless_port"'/}' /etc/XrayR/custom_inbound.json
+        sed -i '/"address": "127.0.0.1",/{n;s/"port": *[0-9]\+,/"port": '"$vless_port"',/}' /etc/XrayR/custom_inbound.json
         echo "已将 /etc/XrayR/custom_inbound.json 的 settings.port 修改为 $vless_port"
     fi
 
