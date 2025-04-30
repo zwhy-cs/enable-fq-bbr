@@ -127,12 +127,25 @@ add_node() {
     # 对 NodeType 进行简单验证
     case "$node_type" in
         V2ray|Vmess|Vless|Shadowsocks|Trojan)
-            ;; # 类型有效
+            ;;
         *)
             echo "错误：无效的节点类型 '$node_type'。请输入 V2ray, Vmess, Vless, Shadowsocks 或 Trojan。"
             return 1
             ;;
     esac
+
+    # 如果是Vless，输入端口并修改custom_inbound.json
+    if [[ "$node_type" == "Vless" ]]; then
+        read -p "请输入要转发到的端口（将写入 /etc/XrayR/custom_inbound.json 的 settings.port）: " vless_port
+        if [[ ! "$vless_port" =~ ^[0-9]+$ ]]; then
+            echo "错误：端口必须为数字。"
+            return 1
+        fi
+        # 用 sed 替换 custom_inbound.json 里的 "port": xxx
+        sed -i 's/"port": *[0-9]\+/"port": '"$vless_port"'/g' /etc/XrayR/custom_inbound.json
+        echo "已将 /etc/XrayR/custom_inbound.json 的 settings.port 修改为 $vless_port"
+    fi
+
     read -p "是否启用Reality (yes/no): " enable_reality
 
     # 根据是否启用Reality来设置其他参数
