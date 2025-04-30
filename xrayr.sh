@@ -143,7 +143,7 @@ delete_node() {
     read -p "请输入要删除的节点ID: " node_id
     read -p "请输入节点类型 (V2ray/Vmess/Vless/Shadowsocks/Trojan): " node_type
     
-    # 查找同时包含NodeID和NodeType的区域
+    # 查找包含NodeID的行
     node_id_line=$(grep -n "NodeID: *$node_id" "$CONFIG_FILE" | cut -d: -f1)
     
     if [ -z "$node_id_line" ]; then
@@ -186,8 +186,8 @@ delete_node() {
     start_line=0
     for (( i=$node_line; i>=$nodes_line; i-- )); do
         line_content=$(sed "${i}q;d" "$CONFIG_FILE")
-        # 查找该节点块开始的标记
-        if [[ "$line_content" =~ ^[[:space:]]*- || "$line_content" =~ ^[[:space:]]*PanelType: ]]; then
+        # 查找该节点块开始的标记（通常是以空格开头的破折号行）
+        if [[ "$line_content" =~ ^[[:space:]]*- ]]; then
             start_line=$i
             break
         fi
@@ -202,9 +202,9 @@ delete_node() {
     end_line=0
     total_lines=$(wc -l < "$CONFIG_FILE")
     
-    for (( i=$node_line+1; i<=$total_lines; i++ )); do
+    for (( i=$((node_line+1)); i<=$total_lines; i++ )); do
         line_content=$(sed "${i}q;d" "$CONFIG_FILE")
-        # 查找下一个节点的开始标记
+        # 查找下一个节点的开始标记（通常是以空格开头的破折号行）
         if [[ "$line_content" =~ ^[[:space:]]*- ]]; then
             # 找到下一个节点的开始行
             end_line=$((i-1))
@@ -226,7 +226,7 @@ delete_node() {
     {
         # 保留节点前的部分
         sed -n "1,$((start_line-1))p" "$CONFIG_FILE"
-        # 保留节点后的部分
+        # 保留节点后的部分（如果存在下一个节点）
         if [ $end_line -lt $total_lines ]; then
             sed -n "$((end_line+1)),${total_lines}p" "$CONFIG_FILE"
         fi
