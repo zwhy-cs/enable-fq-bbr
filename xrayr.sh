@@ -26,7 +26,7 @@ install_xrayr() {
 # 重启 XrayR
 restart_xrayr() {
     echo "正在重启 XrayR..."
-    systemctl restart XrayR
+    XrayR restart   
     echo "XrayR 已重启。"
 }
 
