@@ -8,8 +8,9 @@ echo "--------------------------------------------------"
 echo "1. 安装 XrayR"
 echo "2. 重启 XrayR"
 echo "3. 添加节点"
-echo "4. 退出"
-echo "5. 一键删除所有XrayR相关文件和配置"
+echo "4. 删除节点"
+echo "5. 退出"
+echo "6. 一键删除所有XrayR相关文件和配置"
 echo "--------------------------------------------------"
 read -p "请选择操作： " choice
 
@@ -126,6 +127,123 @@ EOF
     restart_xrayr
 }
 
+# 删除节点
+delete_node() {
+    # 检查配置文件是否存在
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "错误：配置文件 $CONFIG_FILE 不存在!"
+        return 1
+    fi
+    
+    # 要求用户输入要删除的节点ID
+    read -p "请输入要删除的节点ID: " node_id
+    
+    # 使用awk寻找并删除指定节点ID的配置
+    awk -v node_id="$node_id" '
+    BEGIN { 
+        found = 0; 
+        skip = 0; 
+        nodeFound = 0;
+    }
+    
+    # 如果遇到节点标记
+    /^[ \t]*-[ \t]*PanelType:/ { 
+        # 先保存这一行，判断后续行是否包含要删除的节点ID
+        buffer = $0;
+        # 标记进入节点配置区域
+        inNode = 1;
+        # 清空保存行的计数器
+        n = 0;
+        # 保存第一行
+        lines[++n] = buffer;
+        next;
+    }
+    
+    # 如果在节点配置中，查找是否包含要删除的节点ID
+    inNode && /NodeID:[ \t]*[0-9]+/ {
+        # 提取节点ID
+        match($0, /NodeID:[ \t]*([0-9]+)/, arr);
+        current_id = arr[1];
+        
+        # 当前行也保存到缓存
+        lines[++n] = $0;
+        
+        # 如果找到了要删除的节点ID
+        if (current_id == node_id) {
+            found = 1;
+            nodeFound = 1;
+            skip = 1;  # 标记需要跳过
+            next;
+        }
+    }
+    
+    # 不在节点配置区或没有找到匹配的节点ID
+    inNode && !/^[ \t]*-[ \t]*PanelType:/ {
+        # 继续收集配置行
+        if (!skip) {
+            lines[++n] = $0;
+        }
+        next;
+    }
+    
+    # 如果找到下一个节点的开始或文件结束，决定是否输出之前保存的行
+    /^[ \t]*-[ \t]*PanelType:/ && inNode {
+        # 如果不需要跳过，输出前面保存的所有行
+        if (!skip) {
+            for (i = 1; i <= n; i++) {
+                print lines[i];
+            }
+        }
+        
+        # 重置状态
+        inNode = 0;
+        skip = 0;
+        n = 0;
+        
+        # 这是新节点的开始行，保存起来
+        buffer = $0;
+        inNode = 1;
+        lines[++n] = buffer;
+        next;
+    }
+    
+    # 如果不在节点配置中，直接输出
+    !inNode { print; next; }
+    
+    END {
+        # 处理最后一个节点
+        if (inNode && !skip) {
+            for (i = 1; i <= n; i++) {
+                print lines[i];
+            }
+        }
+        
+        # 如果找到并删除了节点，输出成功消息
+        if (nodeFound) {
+            # 这个消息会混入到文件中，所以我们在脚本中另外输出
+            # 这里只设置状态
+            exit(0);
+        } else {
+            # 如果没找到节点，退出状态码为1
+            exit(1);
+        }
+    }
+    ' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp"
+    
+    # 检查awk的执行结果
+    if [ $? -eq 0 ]; then
+        # 将临时文件移动到原配置文件
+        mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+        echo "成功删除节点ID为 $node_id 的配置！"
+        # 重启XrayR使配置生效
+        restart_xrayr
+    else
+        echo "未找到节点ID为 $node_id 的配置，请检查ID是否正确！"
+        # 删除临时文件
+        rm -f "${CONFIG_FILE}.tmp"
+    fi
+}
+
 # 一键删除所有XrayR相关文件和配置
 remove_all_xrayr() {
     echo "警告：即将删除所有XrayR相关文件和配置！"
@@ -155,10 +273,13 @@ case $choice in
         add_node
         ;;
     4)
+        delete_node
+        ;;
+    5)
         echo "退出脚本。"
         exit 0
         ;;
-    5)
+    6)
         remove_all_xrayr
         ;;
     *)
