@@ -188,19 +188,17 @@ delete_node() {
         return
     fi
 
-    # 转换为小写以便传递给 awk (虽然 awk 内部也会转)
     TARGET_NODE_TYPE_LOWER=$(echo "$TARGET_NODE_TYPE" | tr '[:upper:]' '[:lower:]')
     export TARGET_NODE_ID
-    export TARGET_NODE_TYPE # 传递原始大小写或小写均可，awk内部会处理
+    export TARGET_NODE_TYPE
 
     echo "正在查找并准备删除节点 (ID: ${TARGET_NODE_ID}, Type: ${TARGET_NODE_TYPE})..."
 
     local temp_file=$(mktemp)
-    local stderr_file=$(mktemp) # 创建一个临时文件来捕获 stderr
-    local found_node=0 # 初始化为 0 (未找到)
+    local stderr_file=$(mktemp)
+    local found_node=0
 
-    # --- 修改后的 AWK 调用和 stderr 处理 ---
-    # 将 awk 的标准输出重定向到 temp_file, 标准错误重定向到 stderr_file
+    # --- AWK 调用 (保持不变) ---
     awk '
     # 函数：处理缓存的块
     function process_buffer() {
@@ -241,24 +239,36 @@ delete_node() {
         else { print "__NODE_NOT_FOUND__" > "/dev/stderr" }
     }
     ' "$CONFIG_FILE" > "$temp_file" 2> "$stderr_file"
+    local awk_exit_status=$? # 捕获 awk 退出状态
     # --- AWK 调用结束 ---
 
-    # --- 检查 stderr 文件内容 ---
-    if grep -q "__NODE_FOUND_AND_DELETED__" "$stderr_file"; then
+    # --- 增加详细调试 ---
+    echo "--- DEBUG: AWK Exit Status: $awk_exit_status ---" >&2
+    echo "--- DEBUG: Content of stderr_file ($stderr_file): ---" >&2
+    cat "$stderr_file" >&2 # 直接打印 stderr 文件的内容到终端
+    echo "--- DEBUG: End of stderr_file content ---" >&2
+
+    echo "--- DEBUG: Running: grep -q \"__NODE_FOUND_AND_DELETED__\" \"$stderr_file\" ---" >&2
+    grep -q "__NODE_FOUND_AND_DELETED__" "$stderr_file"
+    local grep_exit_status=$? # 捕获 grep 退出状态
+    echo "--- DEBUG: grep exit status: $grep_exit_status (0 means found, 1 means not found) ---" >&2
+
+    if [ "$grep_exit_status" -eq 0 ]; then
+        echo "--- DEBUG: grep found the marker. Setting found_node=1 ---" >&2
         found_node=1
+    else
+        echo "--- DEBUG: grep did NOT find the marker or an error occurred. found_node remains 0 ---" >&2
     fi
-    # (可选) 打印 awk 的 stderr 用于调试
-    # cat "$stderr_file" >&2
+    # --- 调试结束 ---
 
     # 清理临时 stderr 文件
     rm "$stderr_file"
-    # --- 检查结束 ---
 
-
-    # --- 后续逻辑不变 ---
+    # --- 后续逻辑 (增加一个最终检查) ---
+    echo "--- DEBUG: Final value of found_node before if: $found_node ---" >&2
     if [ "$found_node" -eq 1 ]; then
         echo "已在配置文件中找到匹配的节点。"
-        # 显示将被删除的节点内容 (从原始文件中提取，因为 awk 没输出它)
+        # ... (显示和确认删除逻辑不变) ...
         echo "--- 将要删除的节点内容 ---"
         awk '
         function process_buffer() {
@@ -298,11 +308,15 @@ delete_node() {
             echo "操作已取消。"
             rm "$temp_file"
         fi
+        # --- 结束成功路径 ---
     else
+        # --- 失败路径 ---
         echo "未在配置文件中找到匹配的节点 (ID: ${TARGET_NODE_ID}, Type: ${TARGET_NODE_TYPE})。"
         rm "$temp_file"
+        # --- 结束失败路径 ---
     fi
 }
+
 
 
 
