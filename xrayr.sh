@@ -5,12 +5,14 @@ CONFIG_FILE="/etc/XrayR/config.yml"
 
 # 目录栏
 echo "--------------------------------------------------"
+echo " XrayR 管理脚本"
+echo "--------------------------------------------------"
 echo "1. 安装 XrayR"
 echo "2. 重启 XrayR"
 echo "3. 添加节点"
-echo "4. 删除节点"
+echo "4. 删除节点" # 新增选项
 echo "5. 退出"
-echo "6. 一键删除所有XrayR相关文件和配置"
+echo "6. 一键删除所有XrayR相关文件和配置" # 原来的 5 变为 6
 echo "--------------------------------------------------"
 read -p "请选择操作： " choice
 
@@ -20,6 +22,9 @@ install_xrayr() {
     bash <(curl -Ls https://raw.githubusercontent.com/XrayR-project/XrayR-release/master/install.sh)
     # 修改 config.yml 配置文件
     echo "正在初始化 config.yml 文件..."
+    # 确保目录存在
+    mkdir -p /etc/XrayR
+    # 写入基础配置，如果文件已存在则覆盖（安装时通常需要初始化）
     echo -e "Log:\n  Level: warning # Log level: none, error, warning, info, debug\n  AccessPath: # /etc/XrayR/access.Log\n  ErrorPath: # /etc/XrayR/error.log\nDnsConfigPath: # /etc/XrayR/dns.json # Path to dns config, check https://xtls.github.io/config/dns.html for help\nRouteConfigPath: # /etc/XrayR/route.json # Path to route config, check https://xtls.github.io/config/routing.html for help\nInboundConfigPath: # /etc/XrayR/custom_inbound.json # Path to custom inbound config, check https://xtls.github.io/config/inbound.html for help\nOutboundConfigPath: # /etc/XrayR/custom_outbound.json # Path to custom outbound config, check https://xtls.github.io/config/outbound.html for help\nConnectionConfig:\n  Handshake: 4 # Handshake time limit, Second\n  ConnIdle: 30 # Connection idle time limit, Second\n  UplinkOnly: 2 # Time limit when the connection downstream is closed, Second\n  DownlinkOnly: 4 # Time limit when the connection is closed after the uplink is closed, Second\n  BufferSize: 64 # The internal cache size of each connection, kB\nNodes:" > $CONFIG_FILE
     echo "XrayR 安装并初始化配置文件完成。"
 }
@@ -27,32 +32,78 @@ install_xrayr() {
 # 重启 XrayR
 restart_xrayr() {
     echo "正在重启 XrayR..."
-    XrayR restart   
-    echo "XrayR 已重启。"
+    # 检查 XrayR 命令是否存在
+    if command -v XrayR &> /dev/null; then
+        XrayR restart
+        echo "XrayR 已重启。"
+    else
+        echo "错误：未找到 XrayR 命令。请确保 XrayR 已正确安装并配置在 PATH 中。"
+        # 尝试使用 systemctl (如果存在)
+        if command -v systemctl &> /dev/null; then
+            echo "尝试使用 systemctl 重启 XrayR 服务..."
+            systemctl restart XrayR
+            if systemctl is-active --quiet XrayR; then
+                echo "XrayR 服务已通过 systemctl 重启。"
+            else
+                echo "使用 systemctl 重启 XrayR 服务失败。"
+            fi
+        else
+             echo "也未找到 systemctl 命令。无法自动重启 XrayR。"
+        fi
+    fi
 }
 
 # 添加节点到 config.yml
 add_node() {
     echo "请输入要添加的节点信息："
-    read -p "节点 ID: " node_id
-    read -p "选择节点类型 (V2ray/Vmess/Vless/Shadowsocks/Trojan): " node_type
+    read -p "节点 ID (NodeID): " node_id
+    # 对 NodeID 进行简单验证，确保不为空
+    if [[ -z "$node_id" ]]; then
+        echo "错误：节点 ID 不能为空。"
+        return 1
+    fi
+    read -p "选择节点类型 (NodeType: V2ray/Vmess/Vless/Shadowsocks/Trojan): " node_type
+    # 对 NodeType 进行简单验证
+    case "$node_type" in
+        V2ray|Vmess|Vless|Shadowsocks|Trojan)
+            ;; # 类型有效
+        *)
+            echo "错误：无效的节点类型 '$node_type'。请输入 V2ray, Vmess, Vless, Shadowsocks 或 Trojan。"
+            return 1
+            ;;
+    esac
     read -p "是否启用Reality (yes/no): " enable_reality
 
     # 根据是否启用Reality来设置其他参数
     if [[ "$enable_reality" == "yes" ]]; then
         enable_vless=true
         disable_local_reality=true
-        enable_reality=true
+        enable_reality_flag=true # 使用不同的变量名以区分输入的 "yes/no"
     else
         enable_vless=false
         disable_local_reality=false
-        enable_reality=false
+        enable_reality_flag=false
     fi
 
     echo "正在添加节点..."
 
-    # 将节点配置添加到config.yml
+    # 检查配置文件是否存在
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "错误：配置文件 $CONFIG_FILE 不存在。请先执行安装或手动创建。"
+        return 1
+    fi
+
+    # 检查 Nodes: 关键字是否存在，如果不存在则添加
+    if ! grep -q "^Nodes:" "$CONFIG_FILE"; then
+        echo -e "\nNodes:" >> "$CONFIG_FILE"
+        echo "已在配置文件末尾添加 'Nodes:' 关键字。"
+    fi
+
+    # 使用 cat 和 EOF 将节点配置追加到 config.yml
+    # 注意：这里的缩进非常重要，YAML 对缩进敏感
+    # 每个节点块以 '  - PanelType:' 开始（前面有两个空格）
     cat >> $CONFIG_FILE <<EOF
+
   - PanelType: "NewV2board" # Panel type: SSpanel, NewV2board, PMpanel, Proxypanel, V2RaySocks, GoV2Panel, BunPanel
     ApiConfig:
       ApiHost: "https://xb.zwhy.cc"
@@ -95,7 +146,7 @@ add_node() {
           Dest: 80 # Required, Destination of fallback, check https://xtls.github.io/config/features/fallback.html for details.
           ProxyProtocolVer: 0 # Send PROXY protocol version, 0 for disable
       DisableLocalREALITYConfig: $disable_local_reality  # disable local reality config
-      EnableREALITY: $enable_reality # Enable REALITY
+      EnableREALITY: $enable_reality_flag # Enable REALITY
       REALITYConfigs:
         Show: true # Show REALITY debug
         Dest: www.amazon.com:443 # Required, Same as fallback
@@ -122,136 +173,177 @@ add_node() {
 EOF
 
     # 提示用户添加成功
-    echo "节点已成功添加到 config.yml 文件中！"
+    echo "节点 (ID: $node_id, Type: $node_type) 已成功添加到 $CONFIG_FILE 文件中！"
     # 重启 XrayR 使配置生效
     restart_xrayr
 }
 
-# 删除节点
+# --- 新增：删除节点功能 ---
 delete_node() {
+    echo "请输入要删除的节点信息："
+    read -p "节点 ID (NodeID): " node_id_to_delete
+    # 验证 NodeID
+    if [[ -z "$node_id_to_delete" ]]; then
+        echo "错误：节点 ID 不能为空。"
+        return 1
+    fi
+    read -p "节点类型 (NodeType: V2ray/Vmess/Vless/Shadowsocks/Trojan): " node_type_to_delete
+    # 验证 NodeType
+    case "$node_type_to_delete" in
+        V2ray|Vmess|Vless|Shadowsocks|Trojan)
+            ;; # 类型有效
+        *)
+            echo "错误：无效的节点类型 '$node_type_to_delete'。请输入 V2ray, Vmess, Vless, Shadowsocks 或 Trojan。"
+            return 1
+            ;;
+    esac
+
+    echo "正在查找并准备删除节点 (ID: $node_id_to_delete, Type: $node_type_to_delete)..."
+
     # 检查配置文件是否存在
     if [ ! -f "$CONFIG_FILE" ]; then
-        echo "错误：配置文件 $CONFIG_FILE 不存在!"
+        echo "错误：配置文件 $CONFIG_FILE 不存在。"
         return 1
     fi
-    
-    # 备份原始配置文件
-    cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
-    echo "已备份配置文件到 ${CONFIG_FILE}.bak"
-    
-    # 要求用户输入要删除的节点信息
-    read -p "请输入要删除的节点ID: " node_id
-    read -p "请输入节点类型 (V2ray/Vmess/Vless/Shadowsocks/Trojan): " node_type
-    
-    # 查找包含NodeID的行
-    node_id_line=$(grep -n "NodeID: *$node_id" "$CONFIG_FILE" | cut -d: -f1)
-    
-    if [ -z "$node_id_line" ]; then
-        echo "未找到节点ID为 $node_id 的配置，请检查ID是否正确！"
-        return 1
-    fi
-    
-    # 检查该NodeID对应的NodeType是否匹配
-    node_type_found=false
-    for line in $node_id_line; do
-        # 获取NodeID所在行之后的几行，查找NodeType
-        node_type_line=$(tail -n +$line "$CONFIG_FILE" | grep -n "NodeType: *$node_type" | head -n 1 | cut -d: -f1)
-        if [ ! -z "$node_type_line" ]; then
-            # 计算NodeType实际所在行号
-            actual_type_line=$((line + node_type_line - 1))
-            # 检查该NodeType是否在合理范围内（通常NodeType应该在NodeID附近几行内）
-            if [ $((actual_type_line - line)) -lt 10 ]; then
-                node_type_found=true
-                # 使用找到的NodeID行
-                node_line=$line
-                break
-            fi
+
+    # 使用 awk 处理 YAML 文件来删除匹配的节点块
+    # 逻辑：
+    # 1. 逐行读取文件。
+    # 2. 当遇到以 '  - PanelType:' 开头的行时，认为是一个新的节点块的开始。
+    # 3. 处理上一个缓存的块：检查缓存块中是否同时包含目标 NodeID 和 NodeType。
+    # 4. 如果上一个块不包含目标 ID 和 Type，则打印该块。
+    # 5. 开始缓存新的块。
+    # 6. 如果当前行不是块的开始，且我们在一个块内，则将该行追加到缓存。
+    # 7. 如果当前行不在块内（例如文件头部的配置），则直接打印。
+    # 8. 文件结束时，处理最后一个缓存的块。
+
+    local temp_file=$(mktemp) # 创建临时文件
+    local found_node=0 # 标记是否找到了要删除的节点
+
+    # 将 NodeID 和 NodeType 导出为环境变量，以便 awk 可以访问
+    export TARGET_NODE_ID="$node_id_to_delete"
+    export TARGET_NODE_TYPE="$node_type_to_delete"
+
+    awk '
+    # 函数：处理缓存的块
+    function process_buffer() {
+        if (buffer != "") {
+            # 检查缓存的块是否包含目标 NodeID 和 NodeType
+            # 使用精确匹配，确保值正确且前面有正确的键
+            id_pattern = "^[[:space:]]*NodeID:[[:space:]]*" ENVIRON["TARGET_NODE_ID"] "[[:space:]]*$"
+            type_pattern = "^[[:space:]]*NodeType:[[:space:]]*" ENVIRON["TARGET_NODE_TYPE"] "[[:space:]]*$"
+
+            # 分割 buffer 检查每一行
+            split(buffer, lines, "\n")
+            match_id = 0
+            match_type = 0
+            for (i in lines) {
+                if (lines[i] ~ id_pattern) {
+                    match_id = 1
+                }
+                if (lines[i] ~ type_pattern) {
+                    match_type = 1
+                }
+            }
+
+            if (match_id && match_type) {
+                 # 块匹配，不打印（即删除），设置找到标记
+                 found_node_flag = 1
+                 # print "DEBUG: Deleting block for NodeID=" ENVIRON["TARGET_NODE_ID"] ", NodeType=" ENVIRON["TARGET_NODE_TYPE"] > "/dev/stderr"
+            } else {
+                 # 块不匹配，打印它
+                 print buffer
+            }
+            buffer = "" # 清空缓存
+        }
+    }
+
+    # 主处理逻辑
+    BEGIN {
+        buffer = ""      # 初始化块缓存
+        in_block = 0     # 标记是否在节点块内
+        found_node_flag = 0 # 标记是否找到了节点 (在awk内部使用)
+    }
+
+    # 匹配节点块的开始行 (注意开头的两个空格和连字符)
+    /^  - PanelType:/ {
+        process_buffer() # 处理上一个块
+        buffer = $0      # 开始缓存新块
+        in_block = 1     # 进入块标记
+        next             # 跳过默认打印动作，继续下一行
+    }
+
+    # 如果在块内
+    in_block {
+        buffer = buffer "\n" $0 # 将当前行追加到缓存
+        next                 # 跳过默认打印动作，继续下一行
+    }
+
+    # 如果不在块内 (例如文件头部的配置)，直接打印
+    { print }
+
+    # 文件结束时，处理最后一个缓存的块
+    END {
+        process_buffer()
+        # 将找到标记传递给shell (通过打印特殊标记)
+        if (found_node_flag) {
+            print "__NODE_FOUND_AND_DELETED__" > "/dev/stderr"
+        }
+    }
+    ' "$CONFIG_FILE" > "$temp_file" 2> >(grep -q "__NODE_FOUND_AND_DELETED__" && found_node=1) # 将awk的输出重定向到临时文件，错误输出用于检测是否找到节点
+
+    # 检查 awk 是否成功执行 (虽然 awk 通常返回 0，但检查文件大小变化更可靠)
+    # 或者检查我们设置的 found_node 标记
+
+    if [ "$found_node" -eq 1 ]; then
+        echo "找到并已从临时配置中移除节点 (ID: $node_id_to_delete, Type: $node_type_to_delete)。"
+        # 可选：显示更改前后的差异
+        # echo "配置更改预览 (diff):"
+        # diff -u "$CONFIG_FILE" "$temp_file"
+
+        read -p "确认要应用更改并覆盖原配置文件吗？(yes/no): " confirm_delete
+        if [[ "$confirm_delete" == "yes" ]]; then
+            # 备份原配置文件
+            cp "$CONFIG_FILE" "$CONFIG_FILE.bak_$(date +%Y%m%d_%H%M%S)"
+            echo "原配置文件已备份为 $CONFIG_FILE.bak_..."
+            # 用临时文件覆盖原文件
+            mv "$temp_file" "$CONFIG_FILE"
+            echo "节点已成功删除。"
+            # 重启 XrayR 使配置生效
+            restart_xrayr
+        else
+            echo "操作已取消，未修改配置文件。"
+            rm "$temp_file" # 删除临时文件
         fi
-    done
-    
-    if [ "$node_type_found" = false ]; then
-        echo "未找到节点ID为 $node_id 且类型为 $node_type 的配置，请检查信息是否正确！"
-        return 1
+    else
+        echo "未在配置文件中找到匹配的节点 (ID: $node_id_to_delete, Type: $node_type_to_delete)。"
+        rm "$temp_file" # 删除临时文件
     fi
-    
-    # 查找Nodes:所在的行
-    nodes_line=$(grep -n "^Nodes:" "$CONFIG_FILE" | cut -d: -f1)
-    
-    if [ -z "$nodes_line" ]; then
-        echo "找不到Nodes:部分，配置文件格式可能不正确！"
-        return 1
-    fi
-    
-    # 确定节点配置开始行（节点块的开始标记行）
-    start_line=0
-    for (( i=$node_line; i>=$nodes_line; i-- )); do
-        line_content=$(sed "${i}q;d" "$CONFIG_FILE")
-        # 查找该节点块开始的标记（通常是以空格开头的破折号行）
-        if [[ "$line_content" =~ ^[[:space:]]*- ]]; then
-            start_line=$i
-            break
-        fi
-    done
-    
-    if [ $start_line -eq 0 ]; then
-        echo "无法确定节点的开始位置，删除失败！"
-        return 1
-    fi
-    
-    # 查找下一个节点开始的标志或文件结束
-    end_line=0
-    total_lines=$(wc -l < "$CONFIG_FILE")
-    
-    for (( i=$((node_line+1)); i<=$total_lines; i++ )); do
-        line_content=$(sed "${i}q;d" "$CONFIG_FILE")
-        # 查找下一个节点的开始标记（通常是以空格开头的破折号行）
-        if [[ "$line_content" =~ ^[[:space:]]*- ]]; then
-            # 找到下一个节点的开始行
-            end_line=$((i-1))
-            break
-        fi
-    done
-    
-    # 如果没找到下一个节点的开始，则到文件结束
-    if [ $end_line -eq 0 ]; then
-        end_line=$total_lines
-    fi
-    
-    echo "将删除从第 $start_line 行到第 $end_line 行的节点配置"
-    
-    # 创建临时文件
-    temp_file="${CONFIG_FILE}.tmp"
-    
-    # 提取需要保留的部分（删除节点的行）
-    {
-        # 保留节点前的部分
-        sed -n "1,$((start_line-1))p" "$CONFIG_FILE"
-        # 保留节点后的部分（如果存在下一个节点）
-        if [ $end_line -lt $total_lines ]; then
-            sed -n "$((end_line+1)),${total_lines}p" "$CONFIG_FILE"
-        fi
-    } > "$temp_file"
-    
-    # 将临时文件移动到原配置文件
-    mv "$temp_file" "$CONFIG_FILE"
-    
-    echo "成功删除节点ID为 $node_id 类型为 $node_type 的配置！"
-    
-    # 重启XrayR使配置生效
-    restart_xrayr
+
+    # 清理环境变量
+    unset TARGET_NODE_ID
+    unset TARGET_NODE_TYPE
 }
+
 
 # 一键删除所有XrayR相关文件和配置
 remove_all_xrayr() {
     echo "警告：即将删除所有XrayR相关文件和配置！"
     read -p "确定要继续吗？(yes/no): " confirm
     if [[ "$confirm" == "yes" ]]; then
+        echo "正在停止 XrayR 服务..."
         systemctl stop XrayR 2>/dev/null
         systemctl disable XrayR 2>/dev/null
+        # 尝试使用 XrayR 命令停止 (如果 systemctl 失败或不存在)
+        if command -v XrayR &> /dev/null; then
+            XrayR stop 2>/dev/null
+        fi
+        echo "正在删除 XrayR 文件和目录..."
         rm -rf /etc/XrayR
         rm -rf /usr/local/XrayR
         rm -f /etc/systemd/system/XrayR.service
-        systemctl daemon-reload
+        echo "正在重新加载 systemd 配置..."
+        systemctl daemon-reload 2>/dev/null
         echo "所有XrayR相关文件和配置已删除。"
     else
         echo "操作已取消。"
@@ -269,14 +361,14 @@ case $choice in
     3)
         add_node
         ;;
-    4)
+    4) # 新增的删除选项
         delete_node
         ;;
-    5)
+    5) # 原来的 4 变为 5
         echo "退出脚本。"
         exit 0
         ;;
-    6)
+    6) # 原来的 5 变为 6
         remove_all_xrayr
         ;;
     *)
@@ -284,3 +376,5 @@ case $choice in
         exit 1
         ;;
 esac
+
+exit 0
