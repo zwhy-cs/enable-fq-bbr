@@ -143,42 +143,19 @@ if [ -f /etc/sysctl.conf ]; then
 else
   touch /etc/sysctl.conf
 fi
-# 设置默认队列调度算法为 fq
-if grep -q "net.core.default_qdisc" /etc/sysctl.conf; then
-  sed -i "s/.*net.core.default_qdisc.*/net.core.default_qdisc = fq/" /etc/sysctl.conf
-else
-  echo "net.core.default_qdisc = fq" >> /etc/sysctl.conf
-fi
 
-# 设置 TCP 拥塞控制算法为 bbr
-if grep -q "net.ipv4.tcp_congestion_control" /etc/sysctl.conf; then
-  sed -i "s/.*net.ipv4.tcp_congestion_control.*/net.ipv4.tcp_congestion_control = bbr/" /etc/sysctl.conf
-else
-  echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
-fi
-
-# 禁用 IPv6 配置
-if grep -q "net.ipv6.conf.all.disable_ipv6" /etc/sysctl.conf; then
-  sed -i "s/.*net.ipv6.conf.all.disable_ipv6.*/net.ipv6.conf.all.disable_ipv6 = 1/" /etc/sysctl.conf
-else
-  echo "net.ipv6.conf.all.disable_ipv6 = 1" >> /etc/sysctl.conf
-fi
-
-if grep -q "net.ipv6.conf.default.disable_ipv6" /etc/sysctl.conf; then
-  sed -i "s/.*net.ipv6.conf.default.disable_ipv6.*/net.ipv6.conf.default.disable_ipv6 = 1/" /etc/sysctl.conf
-else
-  echo "net.ipv6.conf.default.disable_ipv6 = 1" >> /etc/sysctl.conf
-fi
-
-if grep -q "net.ipv6.conf.lo.disable_ipv6" /etc/sysctl.conf; then
-  sed -i "s/.*net.ipv6.conf.lo.disable_ipv6.*/net.ipv6.conf.lo.disable_ipv6 = 1/" /etc/sysctl.conf
-else
-  echo "net.ipv6.conf.lo.disable_ipv6 = 1" >> /etc/sysctl.conf
-fi
+# 直接覆盖 sysctl.conf 内容
+cat <<EOF > /etc/sysctl.conf
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+net.ipv6.conf.all.disable_ipv6 = 1
+net.ipv6.conf.default.disable_ipv6 = 1
+net.ipv6.conf.lo.disable_ipv6 = 1
+EOF
 
 # 使 sysctl 配置生效
 sysctl -p
-echo "sysctl 配置修改并生效！"
+echo "sysctl 配置已覆盖并生效！"
 
 #######################################
 # 执行 nxtrace 远程脚本（可选操作） #
