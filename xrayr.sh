@@ -134,6 +134,13 @@ add_node() {
             ;;
     esac
 
+    # 新增：手动输入ApiKey
+    read -p "请输入面板ApiKey: " api_key
+    if [[ -z "$api_key" ]]; then
+        echo "错误：ApiKey 不能为空。"
+        return 1
+    fi
+
     # 如果是Vless，输入端口并修改custom_inbound.json
     if [[ "$node_type" == "Vless" ]]; then
         read -p "请输入要转发到的端口（将写入 /etc/XrayR/custom_inbound.json 的 settings.port）: " vless_port
@@ -180,7 +187,7 @@ add_node() {
   - PanelType: "NewV2board" # Panel type: SSpanel, NewV2board, PMpanel, Proxypanel, V2RaySocks, GoV2Panel, BunPanel
     ApiConfig:
       ApiHost: "https://xb.zwhy.cc"
-      ApiKey: "lzi0V41No3lVqnX9sYiGcnycy"
+      ApiKey: "$api_key"
       NodeID: $node_id
       NodeType: $node_type # Node type: V2ray, Vmess, Vless, Shadowsocks, Trojan, Shadowsocks-Plugin
       Timeout: 30 # Timeout for the api request
