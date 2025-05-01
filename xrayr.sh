@@ -13,9 +13,10 @@ echo "3. 添加节点"
 echo "4. 删除节点" # 新增选项
 echo "5. 一键删除所有XrayR相关文件和配置" # 原来的 5 变为 6
 echo "6. 查看当前XrayR配置" # 新增查看配置选项
+echo "7. 使用nano编辑config.yml" # 新增nano编辑选项
 echo "8. 更新 XrayR" # 新增更新选项
 echo "--------------------------------------------------"
-echo "7. 退出" # 退出移到最后一行
+echo "9. 退出" # 退出移到最后一行
 read -p "请选择操作： " choice
 
 # 安装 XrayR
@@ -411,6 +412,24 @@ remove_all_xrayr() {
     fi
 }
 
+# 使用nano编辑config.yml
+edit_config() {
+    echo "正在使用nano编辑 $CONFIG_FILE ..."
+    # 检查nano是否安装
+    if ! command -v nano &> /dev/null; then
+        echo "未检测到nano，正在安装..."
+        if command -v apt-get &> /dev/null; then
+            apt-get update && apt-get install -y nano
+        elif command -v yum &> /dev/null; then
+            yum install -y nano
+        else
+            echo "无法自动安装nano，请手动安装。"
+            return 1
+        fi
+    fi
+    nano "$CONFIG_FILE"
+}
+
 # 更新 XrayR
 update_xrayr() {
     echo "正在更新 XrayR..."
@@ -442,10 +461,13 @@ case $choice in
     6)
         view_config
         ;;
+    7)
+        edit_config
+        ;;
     8)
         update_xrayr
         ;;
-    7)
+    9)
         echo "退出脚本。"
         exit 0
         ;;
