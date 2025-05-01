@@ -15,6 +15,7 @@ echo "5. 一键删除所有XrayR相关文件和配置" # 原来的 5 变为 6
 echo "6. 查看当前XrayR配置" # 新增查看配置选项
 echo "7. 使用nano编辑config.yml" # 新增nano编辑选项
 echo "8. 更新 XrayR" # 新增更新选项
+echo "10. 修改节点限速" # 新增限速修改选项
 echo "--------------------------------------------------"
 echo "9. 退出" # 退出移到最后一行
 read -p "请选择操作： " choice
@@ -441,6 +442,70 @@ update_xrayr() {
     fi
 }
 
+# 修改节点限速
+modify_speed_limit() {
+    echo "----------------------------------------"
+    read -p "请输入要修改限速的节点 NodeID: " TARGET_NODE_ID
+    read -p "请输入节点类型 (NodeType: V2ray/Vmess/Vless/Shadowsocks/Trojan): " TARGET_NODE_TYPE
+    read -p "请输入新的限速值（单位：Mbps，0为不限制）: " NEW_SPEED_LIMIT
+
+    if [[ -z "$TARGET_NODE_ID" ]] || [[ -z "$TARGET_NODE_TYPE" ]] || [[ ! "$NEW_SPEED_LIMIT" =~ ^[0-9]+$ ]]; then
+        echo "错误：NodeID、NodeType 不能为空，限速值必须为数字。"
+        return
+    fi
+
+    local temp_file=$(mktemp)
+    local found_node=0
+
+    awk -v nodeid="$TARGET_NODE_ID" -v nodetype="$TARGET_NODE_TYPE" -v speed="$NEW_SPEED_LIMIT" '
+    function process_buffer() {
+        if (buffer != "") {
+            id_pattern = "^[[:space:]]*NodeID:[[:space:]]*" nodeid "[[:space:]]*$"
+            type_pattern = "^[[:space:]]*NodeType:[[:space:]]*" nodetype "[[:space:]]*#?.*$"
+            split(buffer, lines, "\n"); match_id = 0; match_type = 0
+            for (i in lines) {
+                if (lines[i] ~ id_pattern) match_id = 1
+                if (tolower(lines[i]) ~ tolower(type_pattern)) match_type = 1
+            }
+            if (match_id && match_type) {
+                found_node = 1
+                for (i in lines) {
+                    if (lines[i] ~ /^[[:space:]]*SpeedLimit:/) {
+                        print gensub(/SpeedLimit: .*/, "SpeedLimit: " speed " # Mbps, Local settings will replace remote settings, 0 means disable", 1, lines[i])
+                    } else {
+                        print lines[i]
+                    }
+                }
+            } else {
+                for (i in lines) print lines[i]
+            }
+            buffer = ""
+        }
+    }
+    BEGIN { buffer = ""; in_block = 0; found_node = 0 }
+    /^  - PanelType:/ { process_buffer(); buffer = $0; in_block = 1; next }
+    in_block { buffer = buffer "\n" $0; next }
+    { print }
+    END { process_buffer(); if (found_node) print "__NODE_FOUND__" > "/dev/stderr" }
+    ' "$CONFIG_FILE" > "$temp_file" 2> /tmp/modify_speed_limit_flag
+
+    if grep -q "__NODE_FOUND__" /tmp/modify_speed_limit_flag; then
+        mv "$temp_file" "$CONFIG_FILE"
+        echo "节点 (ID: $TARGET_NODE_ID, Type: $TARGET_NODE_TYPE) 的限速已修改为 $NEW_SPEED_LIMIT Mbps。"
+        read -p "是否需要重启 XrayR 服务以应用更改? (y/n): " restart_confirm
+        if [[ "$restart_confirm" == "y" ]]; then
+            systemctl restart xrayr
+            echo "XrayR 服务已重启。"
+        else
+            echo "请稍后手动重启 XrayR 服务: systemctl restart xrayr"
+        fi
+    else
+        echo "未找到匹配的节点 (ID: $TARGET_NODE_ID, Type: $TARGET_NODE_TYPE)。"
+        rm "$temp_file"
+    fi
+    rm /tmp/modify_speed_limit_flag
+}
+
 # 根据用户选择执行相应的操作
 case $choice in
     1)
@@ -470,6 +535,9 @@ case $choice in
     9)
         echo "退出脚本。"
         exit 0
+        ;;
+    10)
+        modify_speed_limit
         ;;
     *)
         echo "无效选项，退出脚本。"
