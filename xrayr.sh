@@ -142,6 +142,18 @@ add_node() {
         return 1
     fi
 
+    # 新增：是否设置SpeedLimit
+    read -p "是否要设置限速（SpeedLimit）？(y/n): " set_speed_limit
+    if [[ "$set_speed_limit" == "y" ]]; then
+        read -p "请输入限速值（单位：Mbps，0为不限制）: " speed_limit
+        if [[ ! "$speed_limit" =~ ^[0-9]+$ ]]; then
+            echo "错误：限速值必须为数字。"
+            return 1
+        fi
+    else
+        speed_limit=0
+    fi
+
     # 如果是Vless，输入端口并修改custom_inbound.json
     if [[ "$node_type" == "Vless" ]]; then
         read -p "请输入要转发到的端口（将写入 /etc/XrayR/custom_inbound.json 的 settings.port）: " vless_port
@@ -154,13 +166,13 @@ add_node() {
         echo "已将 /etc/XrayR/custom_inbound.json 的 settings.port 修改为 $vless_port"
     fi
 
-    read -p "是否启用Reality (yes/no): " enable_reality
+    read -p "是否启用Reality (y/n): " enable_reality
 
     # 根据是否启用Reality来设置其他参数
-    if [[ "$enable_reality" == "yes" ]]; then
+    if [[ "$enable_reality" == "y" ]]; then
         enable_vless=true
         disable_local_reality=true
-        enable_reality_flag=true # 使用不同的变量名以区分输入的 "yes/no"
+        enable_reality_flag=true # 使用不同的变量名以区分输入的 "y/n"
     else
         enable_vless=false
         disable_local_reality=false
@@ -194,7 +206,7 @@ add_node() {
       Timeout: 30 # Timeout for the api request
       EnableVless: $enable_vless # Enable Vless for V2ray Type
       VlessFlow: "xtls-rprx-vision" # Only support vless
-      SpeedLimit: 0 # Mbps, Local settings will replace remote settings, 0 means disable
+      SpeedLimit: $speed_limit # Mbps, Local settings will replace remote settings, 0 means disable
       DeviceLimit: 0 # Local settings will replace remote settings, 0 means disable
       RuleListPath: # /etc/XrayR/rulelist Path to local rulelist file
       DisableCustomConfig: false # disable custom config for sspanel
@@ -343,12 +355,12 @@ delete_node() {
         ' "$CONFIG_FILE"
         echo "---------------------------"
 
-        read -p "确认删除此节点吗? (y/N): " confirm
-        if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        read -p "确认删除此节点吗? (y/n): " confirm
+        if [[ "$confirm" == "y" ]]; then
             mv "$temp_file" "$CONFIG_FILE"
             echo "节点已从 $CONFIG_FILE 删除。"
-            read -p "是否需要重启 XrayR 服务以应用更改? (y/N): " restart_confirm
-            if [[ "$restart_confirm" =~ ^[Yy]$ ]]; then
+            read -p "是否需要重启 XrayR 服务以应用更改? (y/n): " restart_confirm
+            if [[ "$restart_confirm" == "y" ]]; then
                 systemctl restart xrayr
                 echo "XrayR 服务已重启。"
             else
@@ -378,8 +390,8 @@ view_config() {
 # 一键删除所有XrayR相关文件和配置
 remove_all_xrayr() {
     echo "警告：即将删除所有XrayR相关文件和配置！"
-    read -p "确定要继续吗？(yes/no): " confirm
-    if [[ "$confirm" == "yes" ]]; then
+    read -p "确定要继续吗？(y/n): " confirm
+    if [[ "$confirm" == "y" ]]; then
         echo "正在停止 XrayR 服务..."
         systemctl stop XrayR 2>/dev/null
         systemctl disable XrayR 2>/dev/null
