@@ -13,6 +13,7 @@ echo "3. 添加节点"
 echo "4. 删除节点" # 新增选项
 echo "5. 一键删除所有XrayR相关文件和配置" # 原来的 5 变为 6
 echo "6. 查看当前XrayR配置" # 新增查看配置选项
+echo "8. 更新 XrayR" # 新增更新选项
 echo "--------------------------------------------------"
 echo "7. 退出" # 退出移到最后一行
 read -p "请选择操作： " choice
@@ -398,6 +399,17 @@ remove_all_xrayr() {
     fi
 }
 
+# 更新 XrayR
+update_xrayr() {
+    echo "正在更新 XrayR..."
+    if command -v XrayR &> /dev/null; then
+        XrayR update
+        echo "XrayR 已完成更新。"
+    else
+        echo "错误：未找到 XrayR 命令。请确保 XrayR 已正确安装。"
+    fi
+}
+
 # 根据用户选择执行相应的操作
 case $choice in
     1)
@@ -417,6 +429,9 @@ case $choice in
         ;;
     6)
         view_config
+        ;;
+    8)
+        update_xrayr
         ;;
     7)
         echo "退出脚本。"
