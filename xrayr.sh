@@ -378,7 +378,7 @@ delete_node() {
             echo "节点已从 $CONFIG_FILE 删除。"
             read -p "是否需要重启 XrayR 服务以应用更改? (y/n): " restart_confirm
             if [[ "$restart_confirm" == "y" ]]; then
-                systemctl restart xrayr
+                XrayR restart
                 echo "XrayR 服务已重启。"
             else
                 echo "请稍后手动重启 XrayR 服务: systemctl restart xrayr"
