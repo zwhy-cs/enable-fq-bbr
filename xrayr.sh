@@ -136,7 +136,12 @@ add_node() {
             ;;
     esac
 
-    # 新增：手动输入ApiKey
+    # 新增：手动输入ApiHost
+    read -p "请输入面板ApiHost: " api_host
+    if [[ -z "$api_host" ]]; then
+        echo "错误：ApiHost 不能为空。"
+        return 1
+    fi
     read -p "请输入面板ApiKey: " api_key
     if [[ -z "$api_key" ]]; then
         echo "错误：ApiKey 不能为空。"
@@ -200,7 +205,7 @@ add_node() {
     cat >> $CONFIG_FILE <<EOF
   - PanelType: "NewV2board" # Panel type: SSpanel, NewV2board, PMpanel, Proxypanel, V2RaySocks, GoV2Panel, BunPanel
     ApiConfig:
-      ApiHost: "https://xb.zwhy.cc"
+      ApiHost: "$api_host"
       ApiKey: "$api_key"
       NodeID: $node_id
       NodeType: $node_type # Node type: V2ray, Vmess, Vless, Shadowsocks, Trojan, Shadowsocks-Plugin
