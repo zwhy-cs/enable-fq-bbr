@@ -454,55 +454,53 @@ modify_speed_limit() {
         return
     fi
 
+    export TARGET_NODE_ID
+    export TARGET_NODE_TYPE
+    export NEW_SPEED_LIMIT
+
     local temp_file=$(mktemp)
+    local stderr_file=$(mktemp)
     local found_node=0
 
-    awk -v nodeid="$TARGET_NODE_ID" -v nodetype="$TARGET_NODE_TYPE" -v speed="$NEW_SPEED_LIMIT" '
-    BEGIN {
-        in_node = 0; in_apiconfig = 0; match_id = 0; match_type = 0
-    }
-    # 进入节点块
-    /^  - PanelType:/ {
-        if (in_node) {
-            # 处理上一个节点块
-            if (match_id && match_type) found_node = 1
-            match_id = 0; match_type = 0
-        }
-        in_node = 1; in_apiconfig = 0
-        print $0
-        next
-    }
-    # 进入ApiConfig块
-    /^[[:space:]]+ApiConfig:/ {
-        if (in_node) in_apiconfig = 1
-        print $0
-        next
-    }
-    # 离开ApiConfig块
-    /^[[:space:]]+[A-Za-z]+Config:/ && !/^([[:space:]]+)ApiConfig:/ {
-        in_apiconfig = 0
-        print $0
-        next
-    }
-    # 在ApiConfig块内查找NodeID/NodeType
-    {
-        if (in_node && in_apiconfig) {
-            if ($0 ~ /NodeID:[[:space:]]*\"?/ && $0 ~ nodeid) match_id = 1
-            if (tolower($0) ~ /nodetype:[[:space:]]*\"?/ && tolower($0) ~ tolower(nodetype)) match_type = 1
-            if ($0 ~ /SpeedLimit:/ && match_id && match_type) {
-                print gensub(/SpeedLimit: .*/, "SpeedLimit: " speed " # Mbps, Local settings will replace remote settings, 0 means disable", 1)
-                next
+    awk '
+    function process_buffer() {
+        if (buffer != "") {
+            id_pattern = "^[[:space:]]*NodeID:[[:space:]]*" ENVIRON["TARGET_NODE_ID"] "[[:space:]]*$"
+            target_type_lower = tolower(ENVIRON["TARGET_NODE_TYPE"])
+            type_pattern_lower = "^[[:space:]]*nodetype:[[:space:]]*\"?" target_type_lower "\"?([[:space:]]+#.*|[[:space:]]*$)"
+            split(buffer, lines, "\n"); match_id = 0; match_type = 0
+            for (i in lines) {
+                current_line = lines[i]; current_line_lower = tolower(current_line)
+                if (current_line ~ id_pattern) { match_id = 1 }
+                if (current_line_lower ~ type_pattern_lower) { match_type = 1 }
             }
+            if (match_id && match_type) {
+                found_node_flag = 1
+                for (i in lines) {
+                    if (lines[i] ~ /^[[:space:]]*SpeedLimit:/) {
+                        print gensub(/SpeedLimit: .*/, "SpeedLimit: " ENVIRON["NEW_SPEED_LIMIT"] " # Mbps, Local settings will replace remote settings, 0 means disable", 1, lines[i])
+                    } else {
+                        print lines[i]
+                    }
+                }
+            } else {
+                for (i in lines) print lines[i]
+            }
+            buffer = ""
         }
-        print $0
     }
+    BEGIN { buffer = ""; in_block = 0; found_node_flag = 0 }
+    /^  - PanelType:/ { process_buffer(); buffer = $0; in_block = 1; next }
+    in_block { buffer = buffer "\n" $0; next }
+    { print }
     END {
-        if (in_node && match_id && match_type) found_node = 1
-        if (found_node) print "__NODE_FOUND__" > "/dev/stderr"
+        process_buffer()
+        if (found_node_flag) { print "__NODE_FOUND_AND_MODIFIED__" > "/dev/stderr" }
+        else { print "__NODE_NOT_FOUND__" > "/dev/stderr" }
     }
-    ' "$CONFIG_FILE" > "$temp_file" 2> /tmp/modify_speed_limit_flag
+    ' "$CONFIG_FILE" > "$temp_file" 2> "$stderr_file"
 
-    if grep -q "__NODE_FOUND__" /tmp/modify_speed_limit_flag; then
+    if grep -q "__NODE_FOUND_AND_MODIFIED__" "$stderr_file"; then
         mv "$temp_file" "$CONFIG_FILE"
         echo "节点 (ID: $TARGET_NODE_ID, Type: $TARGET_NODE_TYPE) 的限速已修改为 $NEW_SPEED_LIMIT Mbps。"
         read -p "是否需要重启 XrayR 服务以应用更改? (y/n): " restart_confirm
@@ -510,13 +508,13 @@ modify_speed_limit() {
             XrayR restart
             echo "XrayR 服务已重启。"
         else
-            echo "请稍后手动重启 XrayR 服务: systemctl restart xrayr"
+            echo "请稍后手动重启 XrayR 服务: XrayR restart"
         fi
     else
         echo "未找到匹配的节点 (ID: $TARGET_NODE_ID, Type: $TARGET_NODE_TYPE)。"
         rm "$temp_file"
     fi
-    rm /tmp/modify_speed_limit_flag
+    rm "$stderr_file"
 }
 
 # 根据用户选择执行相应的操作
