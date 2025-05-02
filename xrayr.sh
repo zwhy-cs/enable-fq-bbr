@@ -10,13 +10,14 @@ echo "--------------------------------------------------"
 echo "1. 安装 XrayR"
 echo "2. 重启 XrayR"
 echo "3. 添加节点"
-echo "4. 删除节点" # 新增选项
-echo "5. 一键删除所有XrayR相关文件和配置" # 原来的 5 变为 6
-echo "6. 查看当前XrayR配置" # 新增查看配置选项
-echo "7. 使用nano编辑config.yml" # 新增nano编辑选项
-echo "8. 更新 XrayR" # 新增更新选项
+echo "4. 删除节点"
+echo "5. 修改节点限速" # 新增修改限速选项
+echo "6. 一键删除所有XrayR相关文件和配置"
+echo "7. 查看当前XrayR配置"
+echo "8. 使用nano编辑config.yml"
+echo "9. 更新 XrayR"
 echo "--------------------------------------------------"
-echo "9. 退出" # 退出移到最后一行
+echo "10. 退出" # 退出选项号改为10
 read -p "请选择操作： " choice
 
 # 安装 XrayR
@@ -441,7 +442,153 @@ update_xrayr() {
     fi
 }
 
+# 修改节点限速功能
+modify_speed_limit() {
+    echo "----------------------------------------"
+    read -p "请输入要修改限速的节点的 NodeID: " TARGET_NODE_ID
+    read -p "请输入要修改限速的节点的类型 (NodeType: V2ray/Vmess/Vless/Shadowsocks/Trojan): " TARGET_NODE_TYPE
+    read -p "请输入新的限速值 (Mbps，0表示不限速): " NEW_SPEED_LIMIT
 
+    if [[ -z "$TARGET_NODE_ID" ]] || [[ -z "$TARGET_NODE_TYPE" ]]; then
+        echo "错误：NodeID 和 NodeType 不能为空。"
+        return
+    fi
+
+    # 验证限速值是否为数字
+    if ! [[ "$NEW_SPEED_LIMIT" =~ ^[0-9]+$ ]]; then
+        echo "错误：限速值必须是非负整数。"
+        return
+    fi
+
+    # 传递给 awk 的环境变量
+    export TARGET_NODE_ID
+    export TARGET_NODE_TYPE
+    export NEW_SPEED_LIMIT
+
+    echo "正在查找并准备修改节点 (ID: ${TARGET_NODE_ID}, Type: ${TARGET_NODE_TYPE}) 的限速为 ${NEW_SPEED_LIMIT} Mbps..."
+
+    local temp_file=$(mktemp)
+    local stderr_file=$(mktemp) # 临时文件捕获 stderr
+    local found_node=0 # 初始化为 0
+
+    # --- AWK 处理配置文件，修改限速值 ---
+    awk '
+    function process_node_block() {
+        if (buffer != "") {
+            id_pattern = "^[[:space:]]*NodeID:[[:space:]]*" ENVIRON["TARGET_NODE_ID"] "[[:space:]]*$"
+            target_type_lower = tolower(ENVIRON["TARGET_NODE_TYPE"])
+            type_pattern_lower = "^[[:space:]]*nodetype:[[:space:]]*\"?" target_type_lower "\"?([[:space:]]+#.*|[[:space:]]*$)"
+            speed_pattern = "^([[:space:]]*SpeedLimit:)[[:space:]]*[0-9]+([[:space:]]*#.*|[[:space:]]*$)"
+            
+            split(buffer, lines, "\n")
+            match_id = 0
+            match_type = 0
+            modified_buffer = ""
+            
+            for (i in lines) {
+                current_line = lines[i]
+                current_line_lower = tolower(current_line)
+                
+                if (current_line ~ id_pattern) { 
+                    match_id = 1 
+                }
+                if (current_line_lower ~ type_pattern_lower) { 
+                    match_type = 1 
+                }
+                
+                # 如果找到SpeedLimit行且匹配ID和Type，则替换其值
+                if (match_id && match_type && current_line ~ speed_pattern) {
+                    modified_line = gensub(speed_pattern, "\\1 " ENVIRON["NEW_SPEED_LIMIT"] "\\2", "g", current_line)
+                    modified_buffer = modified_buffer ? (modified_buffer "\n" modified_line) : modified_line
+                    found_node_flag = 1
+                } else {
+                    modified_buffer = modified_buffer ? (modified_buffer "\n" current_line) : current_line
+                }
+            }
+            
+            if (match_id && match_type) {
+                print modified_buffer
+                if (found_node_flag) {
+                    print "__NODE_SPEED_MODIFIED__" > "/dev/stderr"
+                } else {
+                    print "__NODE_FOUND_BUT_NO_SPEED_FIELD__" > "/dev/stderr"
+                }
+            } else {
+                print buffer
+            }
+            
+            buffer = ""
+        }
+    }
+    
+    BEGIN { 
+        buffer = ""
+        in_block = 0
+        found_node_flag = 0
+    }
+    
+    /^  - PanelType:/ { 
+        process_node_block()
+        buffer = $0
+        in_block = 1
+        next 
+    }
+    
+    in_block { 
+        buffer = buffer "\n" $0
+        next 
+    }
+    
+    { print }
+    
+    END {
+        process_node_block()
+        if (!found_node_flag) { 
+            print "__NODE_NOT_FOUND__" > "/dev/stderr" 
+        }
+    }
+    ' "$CONFIG_FILE" > "$temp_file" 2> "$stderr_file"
+    # --- AWK 结束 ---
+
+    # --- 检查 stderr 文件内容 ---
+    if grep -q "__NODE_SPEED_MODIFIED__" "$stderr_file"; then
+        found_node=1
+        operation_status="modified"
+    elif grep -q "__NODE_FOUND_BUT_NO_SPEED_FIELD__" "$stderr_file"; then
+        found_node=1
+        operation_status="no_speed_field"
+    fi
+    rm "$stderr_file" # 清理 stderr 文件
+    # --- 检查结束 ---
+
+    if [ "$found_node" -eq 1 ]; then
+        if [ "$operation_status" == "modified" ]; then
+            echo "已找到匹配的节点并成功修改限速值。"
+            read -p "确认应用这些修改吗? (y/n): " confirm
+            if [[ "$confirm" == "y" ]]; then
+                mv "$temp_file" "$CONFIG_FILE"
+                echo "节点限速已修改为 $NEW_SPEED_LIMIT Mbps。"
+                read -p "是否需要重启 XrayR 服务以应用更改? (y/n): " restart_confirm
+                if [[ "$restart_confirm" == "y" ]]; then
+                    systemctl restart xrayr
+                    echo "XrayR 服务已重启。"
+                else
+                    echo "请稍后手动重启 XrayR 服务: systemctl restart xrayr"
+                fi
+            else
+                echo "操作已取消。"
+                rm "$temp_file"
+            fi
+        elif [ "$operation_status" == "no_speed_field" ]; then
+            echo "找到了匹配的节点，但未找到 SpeedLimit 字段。"
+            echo "请检查配置文件格式或使用编辑器手动修改。"
+            rm "$temp_file"
+        fi
+    else
+        echo "未在配置文件中找到匹配的节点 (ID: ${TARGET_NODE_ID}, Type: ${TARGET_NODE_TYPE})。"
+        rm "$temp_file"
+    fi
+}
 # 根据用户选择执行相应的操作
 case $choice in
     1)
@@ -457,18 +604,21 @@ case $choice in
         delete_node
         ;;
     5)
-        remove_all_xrayr
+        modify_speed_limit
         ;;
     6)
-        view_config
+        remove_all_xrayr
         ;;
     7)
-        edit_config
+        view_config
         ;;
     8)
-        update_xrayr
+        edit_config
         ;;
     9)
+        update_xrayr
+        ;;
+    10)
         echo "退出脚本。"
         exit 0
         ;;
