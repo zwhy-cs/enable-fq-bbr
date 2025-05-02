@@ -460,17 +460,17 @@ modify_speed_limit() {
     awk -v nodeid="$TARGET_NODE_ID" -v nodetype="$TARGET_NODE_TYPE" -v speed="$NEW_SPEED_LIMIT" '
     function process_buffer() {
         if (buffer != "") {
-            id_pattern = "^[[:space:]]*NodeID:[[:space:]]*" nodeid "([[:space:]]*#.*|[[:space:]]*)$"
-            type_pattern = "^[[:space:]]*NodeType:[[:space:]]*\"?" nodetype "\"?([[:space:]]*#.*|[[:space:]]*)$"
+            id_pattern = "[[:space:]]*NodeID:[[:space:]]*" nodeid "([[:space:]]*#.*|[[:space:]]*)$"
+            type_pattern = "[[:space:]]*NodeType:[[:space:]]*\\"?" tolower(nodetype) "\\"?([[:space:]]*#.*|[[:space:]]*)$"
             split(buffer, lines, "\n"); match_id = 0; match_type = 0
             for (i in lines) {
                 if (lines[i] ~ id_pattern) match_id = 1
-                if (tolower(lines[i]) ~ tolower(type_pattern)) match_type = 1
+                if (tolower(lines[i]) ~ type_pattern) match_type = 1
             }
             if (match_id && match_type) {
                 found_node = 1
                 for (i in lines) {
-                    if (lines[i] ~ /^[[:space:]]*SpeedLimit:/) {
+                    if (lines[i] ~ /[[:space:]]*SpeedLimit:/) {
                         print gensub(/SpeedLimit: .*/, "SpeedLimit: " speed " # Mbps, Local settings will replace remote settings, 0 means disable", 1, lines[i])
                     } else {
                         print lines[i]
