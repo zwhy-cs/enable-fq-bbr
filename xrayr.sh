@@ -460,8 +460,8 @@ modify_speed_limit() {
     awk -v nodeid="$TARGET_NODE_ID" -v nodetype="$TARGET_NODE_TYPE" -v speed="$NEW_SPEED_LIMIT" '
     function process_buffer() {
         if (buffer != "") {
-            id_pattern = "^[[:space:]]*NodeID:[[:space:]]*" nodeid "[[:space:]]*$"
-            type_pattern = "^[[:space:]]*NodeType:[[:space:]]*" nodetype "[[:space:]]*#?.*$"
+            id_pattern = "^[[:space:]]*NodeID:[[:space:]]*" nodeid "([[:space:]]*#.*|[[:space:]]*)$"
+            type_pattern = "^[[:space:]]*NodeType:[[:space:]]*\"?" nodetype "\"?([[:space:]]*#.*|[[:space:]]*)$"
             split(buffer, lines, "\n"); match_id = 0; match_type = 0
             for (i in lines) {
                 if (lines[i] ~ id_pattern) match_id = 1
