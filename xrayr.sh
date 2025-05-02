@@ -377,6 +377,66 @@ delete_node() {
     fi
 }
 
+modify_speed_limit() {
+    echo "----------------------------------------"
+    read -p "请输入要修改限速的节点的 NodeID: " TARGET_NODE_ID
+    read -p "请输入要修改限速的节点的类型 (NodeType: V2ray/Vmess/Vless/Shadowsocks/Trojan): " TARGET_NODE_TYPE
+    read -p "请输入新的限速值（单位：Mbps，0为不限制）: " NEW_SPEED_LIMIT
+
+    if [[ -z "$TARGET_NODE_ID" || -z "$TARGET_NODE_TYPE" || ! "$NEW_SPEED_LIMIT" =~ ^[0-9]+$ ]]; then
+        echo "错误：NodeID、NodeType 不能为空，限速值必须为数字。"
+        return 1
+    fi
+
+    echo "正在查找并准备修改节点 (ID: ${TARGET_NODE_ID}, Type: ${TARGET_NODE_TYPE}) 的 SpeedLimit 为 ${NEW_SPEED_LIMIT} Mbps..."
+
+    local temp_file
+    temp_file=$(mktemp)
+    export TARGET_NODE_ID TARGET_NODE_TYPE NEW_SPEED_LIMIT
+
+    awk '
+    function flush_buf() {
+        if (buf=="") return
+        id_pat = "^[[:space:]]*NodeID:[[:space:]]*" ENVIRON["TARGET_NODE_ID"] "[[:space:]]*$"
+        type_pat = "^[[:space:]]*nodetype:[[:space:]]*\"?" tolower(ENVIRON["TARGET_NODE_TYPE"]) "\"?"
+        split(buf, L, "\n")
+        is_match=0
+        for (i in L) {
+            if (L[i] ~ id_pat)        is_match=1
+            if (tolower(L[i]) ~ type_pat && is_match==1) is_match=2
+        }
+        if (is_match==2) {
+            for (j in L) {
+                if (L[j] ~ "^[[:space:]]*SpeedLimit:") {
+                    sub("^[[:space:]]*SpeedLimit:[[:space:]]*[0-9]+", "      SpeedLimit: " ENVIRON["NEW_SPEED_LIMIT"], L[j])
+                }
+            }
+        }
+        for (j in L) print L[j]
+        buf=""
+    }
+    BEGIN { buf=""; in_blk=0; }
+    /^  - PanelType:/ { flush_buf(); buf=$0; in_blk=1; next }
+    in_blk {
+        if (/^  - PanelType:/) { flush_buf(); buf=$0; next }
+        buf=buf "\n" $0
+        next
+    }
+    { print }
+    END { flush_buf() }
+    ' "$CONFIG_FILE" > "$temp_file"
+
+    mv "$temp_file" "$CONFIG_FILE"
+    echo "✅ SpeedLimit 已更新为 ${NEW_SPEED_LIMIT} Mbps。"
+
+    read -p "是否需要重启 XrayR 服务以应用更改? (y/n): " yn
+    if [[ "$yn" == "y" ]]; then
+        systemctl restart xrayr && echo "XrayR 服务已重启。"
+    else
+        echo "请稍后手动重启 XrayR 服务: systemctl restart xrayr"
+    fi
+}
+
 # 查看 config.yml 配置内容
 view_config() {
     echo "---------------- 当前 XrayR 配置 ----------------"
@@ -444,38 +504,18 @@ update_xrayr() {
 
 # 根据用户选择执行相应的操作
 case $choice in
-    1)
-        install_xrayr
-        ;;
-    2)
-        restart_xrayr
-        ;;
-    3)
-        add_node
-        ;;
-    4)
-        delete_node
-        ;;
-    5)
-        remove_all_xrayr
-        ;;
-    6)
-        view_config
-        ;;
-    7)
-        edit_config
-        ;;
-    8)
-        update_xrayr
-        ;;
-    9)
-        echo "退出脚本。"
-        exit 0
-        ;;
-    *)
-        echo "无效选项，退出脚本。"
-        exit 1
-        ;;
+    1) install_xrayr ;;
+    2) restart_xrayr ;;
+    3) add_node ;;
+    4) delete_node ;;
+    5) modify_speed_limit ;;      # ← 新增
+    6) remove_all_xrayr ;;
+    7) view_config ;;
+    8) edit_config ;;
+    9) update_xrayr ;;
+    10) echo "退出脚本。"; exit 0 ;;
+    *) echo "无效选项，退出脚本。"; exit 1 ;;
 esac
+
 
 exit 0
