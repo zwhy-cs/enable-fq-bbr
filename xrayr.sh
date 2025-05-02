@@ -15,8 +15,8 @@ echo "5. 一键删除所有XrayR相关文件和配置" # 原来的 5 变为 6
 echo "6. 查看当前XrayR配置" # 新增查看配置选项
 echo "7. 使用nano编辑config.yml" # 新增nano编辑选项
 echo "8. 更新 XrayR" # 新增更新选项
-echo "--------------------------------------------------"
 echo "9. 退出" # 退出移到最后一行
+echo "10. 更新本脚本"
 read -p "请选择操作： " choice
 
 # 安装 XrayR
@@ -441,6 +441,13 @@ update_xrayr() {
     fi
 }
 
+# 更新本脚本
+update_self_script() {
+    echo "正在从远程仓库拉取最新脚本..."
+    curl -o /usr/local/bin/xrayr.sh -L "https://raw.githubusercontent.com/zwhy-cs/enable-fq-bbr/main/xrayr.sh"
+    chmod +x /usr/local/bin/xrayr.sh
+    echo "脚本已更新为最新版本（/usr/local/bin/xrayr.sh）。"
+}
 
 # 根据用户选择执行相应的操作
 case $choice in
@@ -471,6 +478,9 @@ case $choice in
     9)
         echo "退出脚本。"
         exit 0
+        ;;
+    10)
+        update_self_script
         ;;
     *)
         echo "无效选项，退出脚本。"
