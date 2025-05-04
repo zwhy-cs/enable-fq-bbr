@@ -113,7 +113,7 @@ services:
     volumes:
       - /etc/soga/:/etc/soga/
     environment:
-      - type=v2board
+      - type=xboard
       - server_type=$server_type
       - api=webapi
       - webapi_url=$webapi_url
