@@ -7,27 +7,19 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-# 检查并安装 docker-compose
-check_install_docker_compose() {
-  if ! command -v docker-compose &> /dev/null; then
-    echo "未检测到 docker-compose，正在安装..."
-    if command -v apt &> /dev/null; then
-      apt update
-      apt install -y docker-compose
-    elif command -v yum &> /dev/null; then
-      yum install -y docker-compose
-    else
-      echo "无法自动安装 docker-compose，请手动安装后再运行此脚本"
-      exit 1
-    fi
-    echo "docker-compose 安装完成"
+# 检查并安装 docker
+check_install_docker() {
+  if ! docker version &> /dev/null; then
+    echo "未检测到 docker，正在安装..."
+    curl -sSL https://get.docker.com | bash
+    echo "docker 安装完成"
   else
-    echo "docker-compose 已安装"
+    echo "docker 已安装"
   fi
 }
 
 # 执行检查安装
-check_install_docker_compose
+check_install_docker
 
 SOGA_DIR="/etc/soga"
 DEFAULT_COMPOSE_FILE="$SOGA_DIR/docker-compose.yml"
