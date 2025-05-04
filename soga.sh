@@ -171,8 +171,10 @@ add_node() {
     current=$(echo "$current" | tr -d '"' | tr -d ' ')
     updated="$current,$new_id"
   fi
-  # 使用更可靠的 sed 命令
-  sed -i "s/^\([[:space:]]*- node_id=\).*$/\1$updated/" "$COMPOSE_FILE"
+  # 使用临时文件来更新配置
+  tmp_file=$(mktemp)
+  awk -v new_id="$updated" '/- node_id=/ {print "      - node_id=" new_id; next} {print}' "$COMPOSE_FILE" > "$tmp_file"
+  mv "$tmp_file" "$COMPOSE_FILE"
   echo "已更新 node_id 列表：$updated"
   docker-compose -f "$COMPOSE_FILE" up -d
   echo "添加并重启服务完成。"
