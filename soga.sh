@@ -27,7 +27,7 @@ DEFAULT_COMPOSE_FILE="$SOGA_DIR/docker-compose.yml"
 COMPOSE_FILE=""
 
 # 显示菜单
-show_menu() {
+enable_show_menu() {
   clear
   echo "========================================="
   echo "        Soga 后端管理脚本               "
@@ -42,9 +42,9 @@ show_menu() {
 }
 
 # 选择服务类型对应的 compose 文件
-choose_compose() {
+enable_choose_compose() {
   read -p "请输入 server_type (对应 compose 文件后缀，如 ss、v2ray、trojan): " sts
-n  file="$SOGA_DIR/docker-compose-$sts.yml"
+  file="$SOGA_DIR/docker-compose-$sts.yml"
   if [ ! -f "$file" ]; then
     echo "找不到文件 $file，请确认已安装对应服务。"
     return 1
@@ -97,7 +97,7 @@ EOF
 # 编辑配置
 edit_soga() {
   echo " >>> 请选择要编辑的服务 compose 文件"
-  if ! choose_compose; then read -p "按回车键返回菜单..." _; return; fi
+  if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
   echo "编辑文件：$COMPOSE_FILE"
   ${EDITOR:-vi} "$COMPOSE_FILE"
   echo "配置已保存。"
@@ -107,7 +107,7 @@ edit_soga() {
 # 重启服务
 restart_soga() {
   echo " >>> 请选择要重启的服务"
-  if ! choose_compose; then read -p "按回车键返回菜单..." _; return; fi
+  if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
   echo "重启服务：$COMPOSE_FILE"
   docker-compose -f "$COMPOSE_FILE" up -d
   echo "服务已重启。"
@@ -117,8 +117,7 @@ restart_soga() {
 # 添加节点
 add_node() {
   echo " >>> 添加节点：请选择对应服务"
-  if ! choose_compose; then read -p "按回车键返回菜单..." _; return; fi
-  echo "操作文件：$COMPOSE_FILE"
+  if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
   read -p "请输入要添加的 node_id: " new_id
   current=$(grep "- node_id=" "$COMPOSE_FILE" | cut -d'=' -f2)
   if [ -z "$current" ]; then
@@ -136,8 +135,7 @@ add_node() {
 # 删除节点
 delete_node() {
   echo " >>> 删除节点：请选择对应服务"
-  if ! choose_compose; then read -p "按回车键返回菜单..." _; return; fi
-  echo "操作文件：$COMPOSE_FILE"
+  if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
   read -p "请输入要删除的 node_id: " rem_id
   current=$(grep "- node_id=" "$COMPOSE_FILE" | cut -d'=' -f2)
   IFS=',' read -ra ids <<< "$current"
@@ -156,7 +154,7 @@ delete_node() {
 
 # 主循环
 while true; do
-  show_menu
+  enable_show_menu
   read -p "请输入选项 [0-5]: " choice
   case "$choice" in
     1) install_soga  ;; 
