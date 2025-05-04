@@ -83,7 +83,7 @@ enable_show_menu() {
 # 选择服务类型对应的 compose 文件
 enable_choose_compose() {
   read -p "请输入 server_type (对应 compose 文件后缀，如 ss、v2ray、trojan): " sts
-  file="$SOGA_DIR/docker-compose-$sts.yml"
+  file="$SOGA_DIR/$sts/docker-compose-$sts.yml"
   if [ ! -f "$file" ]; then
     echo "找不到文件 $file，请确认已安装对应服务。"
     return 1
@@ -101,7 +101,7 @@ install_soga() {
   echo "node_id 将留空，请使用"添加节点"功能添加。"
 
   mkdir -p "$SOGA_DIR/$server_type"
-  COMPOSE_FILE="$SOGA_DIR/docker-compose-$server_type.yml"
+  COMPOSE_FILE="$SOGA_DIR/$server_type/docker-compose-$server_type.yml"
   cat > "$COMPOSE_FILE" << EOF
 version: "3.8"
 
@@ -240,7 +240,7 @@ check_services() {
   docker ps | grep soga
   echo ""
   echo "所有配置文件："
-  ls -l /etc/soga/docker-compose-*.yml
+  ls -l /etc/soga/*/docker-compose-*.yml 2>/dev/null || echo "未找到配置文件"
   read -p "按回车键返回菜单..." _
 }
 
