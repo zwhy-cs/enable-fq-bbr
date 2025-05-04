@@ -100,7 +100,7 @@ install_soga() {
   read -p "请输入 webapi_key: " webapi_key
   echo "node_id 将留空，请使用"添加节点"功能添加。"
 
-  mkdir -p "$SOGA_DIR"
+  mkdir -p "$SOGA_DIR/$server_type"
   COMPOSE_FILE="$SOGA_DIR/docker-compose-$server_type.yml"
   cat > "$COMPOSE_FILE" << EOF
 version: "3.8"
@@ -112,7 +112,7 @@ services:
     restart: always
     network_mode: host
     volumes:
-      - /etc/soga/:/etc/soga/
+      - /etc/soga/$server_type/:/etc/soga/
     environment:
       - type=xboard
       - server_type=$server_type
