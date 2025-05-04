@@ -141,12 +141,24 @@ add_node() {
   if [ -z "$current_node_id" ]; then
     sed -i "s/node_id=.*/node_id=$node_id/" "$COMPOSE_FILE"
   else
-    # 检查新 node_id 是否已存在
-    if [[ $current_node_id == *"$node_id"* ]]; then
+    # 将当前node_id字符串转为数组，以便精确匹配
+    IFS=',' read -r -a node_ids <<< "$current_node_id"
+    node_exists=0
+    
+    # 检查新node_id是否已存在
+    for existing_id in "${node_ids[@]}"; do
+      if [ "$existing_id" = "$node_id" ]; then
+        node_exists=1
+        break
+      fi
+    done
+    
+    if [ $node_exists -eq 1 ]; then
       echo "该 node_id 已存在"
       read -p "按回车键返回菜单..." _
       return
     fi
+    
     # 在现有 node_id 后添加新的 node_id
     new_node_id="$current_node_id,$node_id"
     sed -i "s/node_id=.*/node_id=$new_node_id/" "$COMPOSE_FILE"
@@ -179,15 +191,28 @@ delete_node() {
     return
   fi
 
-  # 检查要删除的 node_id 是否存在
-  if [[ $current_node_id != *"$node_id"* ]]; then
+  # 将当前node_id字符串转为数组
+  IFS=',' read -r -a node_ids <<< "$current_node_id"
+  node_exists=0
+  new_node_ids=()
+  
+  # 检查要删除的node_id是否存在，并构建新的node_id列表
+  for existing_id in "${node_ids[@]}"; do
+    if [ "$existing_id" = "$node_id" ]; then
+      node_exists=1
+    else
+      new_node_ids+=("$existing_id")
+    fi
+  done
+  
+  if [ $node_exists -eq 0 ]; then
     echo "该 node_id 不存在"
     read -p "按回车键返回菜单..." _
     return
   fi
 
-  # 删除指定的 node_id
-  new_node_id=$(echo "$current_node_id" | sed "s/,$node_id//;s/$node_id,//;s/$node_id//")
+  # 将数组转回逗号分隔的字符串
+  new_node_id=$(IFS=,; echo "${new_node_ids[*]}")
   
   # 如果删除后为空，则设置为空
   if [ -z "$new_node_id" ]; then
