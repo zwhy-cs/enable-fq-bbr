@@ -154,54 +154,81 @@ restart_soga() {
 
 # 添加节点
 add_node() {
-  echo " >>> 添加节点：请选择对应服务"
+  echo " >>> 添加节点..."
   if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
-  read -p "请输入要添加的 node_id: " new_id
-  current=$(grep "- node_id=" "$COMPOSE_FILE" | cut -d'=' -f2 | tr -d ' ')
-  if [ -z "$current" ]; then
-    updated="$new_id"
+  
+  read -p "请输入 node_id: " node_id
+  if [ -z "$node_id" ]; then
+    echo "node_id 不能为空"
+    read -p "按回车键返回菜单..." _
+    return
+  fi
+
+  # 获取当前 node_id
+  current_node_id=$(grep -oP 'node_id=\K[^ ]*' "$COMPOSE_FILE")
+  
+  # 如果当前 node_id 为空，直接设置新值
+  if [ -z "$current_node_id" ]; then
+    sed -i "s/node_id=.*/node_id=$node_id/" "$COMPOSE_FILE"
   else
-    # 检查是否已经存在该 node_id
-    if [[ $current == *"$new_id"* ]]; then
-      echo "该 node_id 已存在，无需重复添加。"
+    # 检查新 node_id 是否已存在
+    if [[ $current_node_id == *"$node_id"* ]]; then
+      echo "该 node_id 已存在"
       read -p "按回车键返回菜单..." _
       return
     fi
-    updated="$current,$new_id"
+    # 在现有 node_id 后添加新的 node_id
+    new_node_id="$current_node_id,$node_id"
+    sed -i "s/node_id=.*/node_id=$new_node_id/" "$COMPOSE_FILE"
   fi
-  # 使用临时文件来更新配置
-  tmp_file=$(mktemp)
-  awk -v new_id="$updated" '
-    /- node_id=/ {
-      print "      - node_id=" new_id
-      next
-    }
-    {print}
-  ' "$COMPOSE_FILE" > "$tmp_file"
-  mv "$tmp_file" "$COMPOSE_FILE"
-  echo "已更新 node_id 列表：$updated"
+  
+  echo "正在重启服务以应用新配置..."
   docker-compose -f "$COMPOSE_FILE" up -d
-  echo "添加并重启服务完成。"
+  echo "节点添加完成。"
   read -p "按回车键返回菜单..." _
 }
 
 # 删除节点
 delete_node() {
-  echo " >>> 删除节点：请选择对应服务"
+  echo " >>> 删除节点..."
   if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
-  read -p "请输入要删除的 node_id: " rem_id
-  current=$(grep "- node_id=" "$COMPOSE_FILE" | cut -d'=' -f2)
-  IFS=',' read -ra ids <<< "$current"
-  new_list=""
-  for id in "${ids[@]}"; do
-    if [ "$id" != "$rem_id" ] && [ -n "$id" ]; then
-      new_list=${new_list:+$new_list,}$id
-    fi
-  done
-  sed -i "/- node_id=/c\      - node_id=$new_list" "$COMPOSE_FILE"
-  echo "已更新 node_id 列表：$new_list"
+  
+  read -p "请输入要删除的 node_id: " node_id
+  if [ -z "$node_id" ]; then
+    echo "node_id 不能为空"
+    read -p "按回车键返回菜单..." _
+    return
+  fi
+
+  # 获取当前 node_id
+  current_node_id=$(grep -oP 'node_id=\K[^ ]*' "$COMPOSE_FILE")
+  
+  if [ -z "$current_node_id" ]; then
+    echo "当前没有配置任何 node_id"
+    read -p "按回车键返回菜单..." _
+    return
+  fi
+
+  # 检查要删除的 node_id 是否存在
+  if [[ $current_node_id != *"$node_id"* ]]; then
+    echo "该 node_id 不存在"
+    read -p "按回车键返回菜单..." _
+    return
+  fi
+
+  # 删除指定的 node_id
+  new_node_id=$(echo "$current_node_id" | sed "s/,$node_id//;s/$node_id,//;s/$node_id//")
+  
+  # 如果删除后为空，则设置为空
+  if [ -z "$new_node_id" ]; then
+    sed -i "s/node_id=.*/node_id=/" "$COMPOSE_FILE"
+  else
+    sed -i "s/node_id=.*/node_id=$new_node_id/" "$COMPOSE_FILE"
+  fi
+  
+  echo "正在重启服务以应用新配置..."
   docker-compose -f "$COMPOSE_FILE" up -d
-  echo "删除并重启服务完成。"
+  echo "节点已删除。"
   read -p "按回车键返回菜单..." _
 }
 
