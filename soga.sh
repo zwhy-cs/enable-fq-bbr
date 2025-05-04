@@ -157,7 +157,7 @@ add_node() {
   echo " >>> 添加节点：请选择对应服务"
   if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
   read -p "请输入要添加的 node_id: " new_id
-  current=$(grep "- node_id=" "$COMPOSE_FILE" | cut -d'=' -f2)
+  current=$(grep "- node_id=" "$COMPOSE_FILE" | cut -d'=' -f2 | tr -d ' ')
   if [ -z "$current" ]; then
     updated="$new_id"
   else
@@ -167,13 +167,17 @@ add_node() {
       read -p "按回车键返回菜单..." _
       return
     fi
-    # 移除可能存在的引号和空格
-    current=$(echo "$current" | tr -d '"' | tr -d ' ')
     updated="$current,$new_id"
   fi
   # 使用临时文件来更新配置
   tmp_file=$(mktemp)
-  awk -v new_id="$updated" '/- node_id=/ {print "      - node_id=" new_id; next} {print}' "$COMPOSE_FILE" > "$tmp_file"
+  awk -v new_id="$updated" '
+    /- node_id=/ {
+      print "      - node_id=" new_id
+      next
+    }
+    {print}
+  ' "$COMPOSE_FILE" > "$tmp_file"
   mv "$tmp_file" "$COMPOSE_FILE"
   echo "已更新 node_id 列表：$updated"
   docker-compose -f "$COMPOSE_FILE" up -d
