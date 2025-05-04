@@ -167,9 +167,12 @@ add_node() {
       read -p "按回车键返回菜单..." _
       return
     fi
+    # 移除可能存在的引号和空格
+    current=$(echo "$current" | tr -d '"' | tr -d ' ')
     updated="$current,$new_id"
   fi
-  sed -i "/- node_id=/c\      - node_id=$updated" "$COMPOSE_FILE"
+  # 使用更精确的 sed 命令
+  sed -i "s/\(- node_id=\).*/\1$updated/" "$COMPOSE_FILE"
   echo "已更新 node_id 列表：$updated"
   docker-compose -f "$COMPOSE_FILE" up -d
   echo "添加并重启服务完成。"
