@@ -75,6 +75,7 @@ enable_show_menu() {
   echo "3) 重启 Soga 服务"
   echo "4) 添加节点"
   echo "5) 删除节点"
+  echo "6) 检查服务状态"
   echo "0) 退出"
   echo "========================================="
 }
@@ -232,16 +233,28 @@ delete_node() {
   read -p "按回车键返回菜单..." _
 }
 
+# 检查服务状态
+check_services() {
+  echo " >>> 检查服务状态..."
+  echo "当前运行的服务："
+  docker ps | grep soga
+  echo ""
+  echo "所有配置文件："
+  ls -l /etc/soga/docker-compose-*.yml
+  read -p "按回车键返回菜单..." _
+}
+
 # 主循环
 while true; do
   enable_show_menu
-  read -p "请输入选项 [0-5]: " choice
+  read -p "请输入选项 [0-6]: " choice
   case "$choice" in
     1) install_soga  ;; 
     2) edit_soga     ;; 
     3) restart_soga  ;; 
     4) add_node      ;; 
     5) delete_node   ;; 
+    6) check_services;; 
     0) echo "退出脚本。"; exit 0 ;; 
     *) echo "无效选项，请重新输入。"; read -p "按回车键继续..." _;;
   esac
