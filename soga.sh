@@ -107,7 +107,7 @@ edit_soga() {
   echo " >>> 请选择要编辑的服务 compose 文件"
   if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
   echo "编辑文件：$COMPOSE_FILE"
-  ${EDITOR:-vi} "$COMPOSE_FILE"
+  ${EDITOR:-nano} "$COMPOSE_FILE"
   echo "配置已保存。"
   read -p "按回车键返回菜单..." _
 }
