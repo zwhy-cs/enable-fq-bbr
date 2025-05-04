@@ -7,58 +7,27 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-# 检查 Docker 是否已安装，否则安装
-if ! command -v docker &> /dev/null; then
-  echo "未检测到 Docker，正在安装..."
-  if command -v apt-get &> /dev/null; then
-    apt-get update
-    apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
-    curl -fsSL https://download.docker.com/linux/$(lsb_release -is | tr '[:upper:]' '[:lower:]')/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/$(lsb_release -is | tr '[:upper:]' '[:lower:]') $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-    apt-get update
-    apt-get install -y docker-ce docker-ce-cli containerd.io
-  elif command -v yum &> /dev/null; then
-    yum install -y yum-utils
-    yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-    yum install -y docker-ce docker-ce-cli containerd.io
-    systemctl start docker
-    systemctl enable docker
-  else
-    echo "无法自动安装 Docker，请手动安装后重试。"
-    exit 1
-  fi
-  echo "Docker 安装完成。"
-fi
-
-# 确保 Docker 服务正在运行
-if ! systemctl is-active --quiet docker; then
-  echo "Docker 服务未运行，正在启动..."
-  systemctl start docker
-  systemctl enable docker
-  echo "Docker 服务已启动。"
-fi
-
-# 检查 docker-compose 是否已安装，否则安装
-if ! command -v docker-compose &> /dev/null; then
-  echo "未检测到 docker-compose，正在安装..."
-  if command -v apt-get &> /dev/null; then
-    apt-get update
-    apt-get install -y docker-compose
-  elif command -v yum &> /dev/null; then
-    yum install -y docker-compose
-  else
-    echo "无法通过包管理器安装 docker-compose，尝试使用 curl 方式安装..."
-    curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-    chmod +x /usr/local/bin/docker-compose
-    ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
-  fi
-  
+# 检查并安装 docker-compose
+check_install_docker_compose() {
   if ! command -v docker-compose &> /dev/null; then
-    echo "安装 docker-compose 失败，请手动安装后重试。"
-    exit 1
+    echo "未检测到 docker-compose，正在安装..."
+    if command -v apt &> /dev/null; then
+      apt update
+      apt install -y docker-compose
+    elif command -v yum &> /dev/null; then
+      yum install -y docker-compose
+    else
+      echo "无法自动安装 docker-compose，请手动安装后再运行此脚本"
+      exit 1
+    fi
+    echo "docker-compose 安装完成"
+  else
+    echo "docker-compose 已安装"
   fi
-  echo "docker-compose 安装完成。"
-fi
+}
+
+# 执行检查安装
+check_install_docker_compose
 
 SOGA_DIR="/etc/soga"
 DEFAULT_COMPOSE_FILE="$SOGA_DIR/docker-compose.yml"
