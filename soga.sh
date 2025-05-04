@@ -72,7 +72,7 @@ install_soga() {
   mkdir -p "$SOGA_DIR/$server_type"
   COMPOSE_FILE="$SOGA_DIR/$server_type/docker-compose-$server_type.yml"
   cat > "$COMPOSE_FILE" << EOF
-version: "3.8"
+version: "3.3"
 
 services:
   soga:
