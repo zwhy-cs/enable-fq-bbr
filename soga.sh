@@ -97,7 +97,7 @@ install_soga() {
   read -p "请输入 server_type (如 ss/v2ray/trojan 等): " server_type
   read -p "请输入 webapi_url (含 https://、以 / 结尾): " webapi_url
   read -p "请输入 webapi_key: " webapi_key
-  echo "node_id 将留空，请使用“添加节点”功能添加。"
+  echo "node_id 将留空，请使用"添加节点"功能添加。"
 
   mkdir -p "$SOGA_DIR"
   COMPOSE_FILE="$SOGA_DIR/docker-compose-$server_type.yml"
@@ -113,7 +113,7 @@ services:
     volumes:
       - /etc/soga/:/etc/soga/
     environment:
-      - type=v2board
+      - type=xboard
       - server_type=$server_type
       - api=webapi
       - webapi_url=$webapi_url
@@ -161,6 +161,12 @@ add_node() {
   if [ -z "$current" ]; then
     updated="$new_id"
   else
+    # 检查是否已经存在该 node_id
+    if [[ $current == *"$new_id"* ]]; then
+      echo "该 node_id 已存在，无需重复添加。"
+      read -p "按回车键返回菜单..." _
+      return
+    fi
     updated="$current,$new_id"
   fi
   sed -i "/- node_id=/c\      - node_id=$updated" "$COMPOSE_FILE"
