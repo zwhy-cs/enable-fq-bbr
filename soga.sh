@@ -89,7 +89,7 @@ EOF
 
   echo "配置文件已生成：$COMPOSE_FILE"
   echo "正在启动 Soga 服务..."
-  docker-compose -f "$COMPOSE_FILE" up -d
+  docker compose -f "$COMPOSE_FILE" up -d
   echo "安装并启动完成。"
   read -p "按回车键返回菜单..." _
 }
@@ -109,7 +109,7 @@ restart_soga() {
   echo " >>> 请选择要重启的服务"
   if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
   echo "重启服务：$COMPOSE_FILE"
-  docker-compose -f "$COMPOSE_FILE" up -d
+  docker compose -f "$COMPOSE_FILE" up -d
   echo "服务已重启。"
   read -p "按回车键返回菜单..." _
 }
@@ -157,7 +157,7 @@ add_node() {
   fi
   
   echo "正在重启服务以应用新配置..."
-  docker-compose -f "$COMPOSE_FILE" up -d
+  docker compose -f "$COMPOSE_FILE" up -d
   echo "节点添加完成。"
   read -p "按回车键返回菜单..." _
 }
@@ -214,7 +214,7 @@ delete_node() {
   fi
   
   echo "正在重启服务以应用新配置..."
-  docker-compose -f "$COMPOSE_FILE" up -d
+  docker compose -f "$COMPOSE_FILE" up -d
   echo "节点已删除。"
   read -p "按回车键返回菜单..." _
 }
