@@ -260,6 +260,14 @@ uninstall_xray() {
     info "Xray已卸载"
 }
 
+# 添加查看配置文件函数
+view_config() {
+    info "Xray配置文件内容："
+    echo ""
+    cat /usr/local/etc/xray/config.json
+    echo ""
+}
+
 # 检查Xray状态
 check_status() {
     echo ""
@@ -277,9 +285,10 @@ show_menu() {
     echo "3. 添加Shadowsocks节点"
     echo "4. 卸载Xray"
     echo "5. 查看Xray状态"
+    echo "6. 查看Xray配置"
     echo "0. 退出脚本"
     echo "----------------------"
-    read -p "请输入选项 [0-5]: " option
+    read -p "请输入选项 [0-6]: " option
     
     case "$option" in
         1)
@@ -302,6 +311,9 @@ show_menu() {
             ;;
         5)
             check_status
+            ;;
+        6)
+            view_config
             ;;
         0)
             exit 0
