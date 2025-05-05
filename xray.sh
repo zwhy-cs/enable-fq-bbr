@@ -116,87 +116,59 @@ add_reality_node() {
     read -p "请输入服务器名称 (一般与目标网站域名相同): " SERVER_NAME
     SERVER_NAME=${SERVER_NAME:-"www.microsoft.com"}
     
-    # 临时保存当前配置
-    cp /usr/local/etc/xray/config.json /usr/local/etc/xray/config.json.bak
-    
-    # 使用jq构建新的配置（需要先检查是否安装）
-    if ! command -v jq &> /dev/null; then
-        info "正在安装jq..."
-        if [[ $PKGMANAGER == "apt" ]]; then
-            apt update -y
-            apt install -y jq
-        elif [[ $PKGMANAGER == "yum" ]]; then
-            yum install -y epel-release
-            yum install -y jq
-        fi
-    fi
-    
-    # 生成Reality节点配置
-    REALITY_INBOUND=$(cat << EOF
+    # 直接创建完整的新配置文件，而不是修改现有的
+    cat > /usr/local/etc/xray/config.json << EOF
 {
-  "port": $PORT,
-  "protocol": "vless",
-  "settings": {
-    "clients": [
-      {
-        "id": "$UUID",
-        "flow": "xtls-rprx-vision"
+  "log": {
+    "loglevel": "debug"
+  },
+  "inbounds": [
+    {
+      "port": $PORT,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "$UUID",
+            "flow": "xtls-rprx-vision"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "dest": "$DEST",
+          "serverNames": [
+            "$SERVER_NAME"
+          ],
+          "privateKey": "$PRIVATE_KEY",
+          "shortIds": [
+            "$SHORT_ID"
+          ]
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ],
+        "routeOnly": true
       }
-    ],
-    "decryption": "none"
-  },
-  "streamSettings": {
-    "network": "tcp",
-    "security": "reality",
-    "realitySettings": {
-      "dest": "$DEST",
-      "serverNames": [
-        "$SERVER_NAME"
-      ],
-      "privateKey": "$PRIVATE_KEY",
-      "shortIds": [
-        "$SHORT_ID"
-      ]
     }
-  },
-  "sniffing": {
-    "enabled": true,
-    "destOverride": [
-      "http",
-      "tls",
-      "quic"
-    ],
-    "routeOnly": true
-  }
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    }
+  ]
 }
 EOF
-)
-
-    # 使用临时文件进行处理
-    TMP_FILE=$(mktemp)
-    OUTBOUNDS_CONFIG=$(cat << EOF
-[
-  {
-    "protocol": "freedom",
-    "tag": "direct"
-  }
-]
-EOF
-)
     
-    # 合并配置
-    jq --argjson inbound "$REALITY_INBOUND" --argjson outbounds "$OUTBOUNDS_CONFIG" '.inbounds += [$inbound] | .outbounds = $outbounds' /usr/local/etc/xray/config.json.bak > "$TMP_FILE"
-    
-    # 检查jq是否运行成功
-    if [ $? -ne 0 ]; then
-        error "配置合并失败，恢复原配置"
-        mv /usr/local/etc/xray/config.json.bak /usr/local/etc/xray/config.json
-        return
-    fi
-    
-    # 更新配置文件
-    mv "$TMP_FILE" /usr/local/etc/xray/config.json
-    chmod 644 /usr/local/etc/xray/config.json
     
     # 重启Xray
     systemctl restart xray
@@ -248,10 +220,6 @@ check_status() {
     echo ""
     echo "Xray状态："
     systemctl status xray --no-pager
-    echo ""
-    echo "Xray配置信息："
-    cat /usr/local/etc/xray/config.json
-    echo ""
 }
 
 # 主菜单
