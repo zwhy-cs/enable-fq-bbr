@@ -219,7 +219,7 @@ uninstall_xray() {
 check_status() {
     echo ""
     echo "Xray状态："
-    systemctl status xray --no-pager
+    systemctl status xray
 }
 
 # 主菜单
