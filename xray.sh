@@ -262,6 +262,76 @@ uninstall_xray() {
     info "Xray已卸载"
 }
 
+# 添加查看所有节点函数
+list_nodes() {
+    info "当前所有节点信息："
+    echo ""
+    
+    # 读取配置文件
+    if [ -f "/usr/local/etc/xray/config.json" ]; then
+        CONFIG=$(cat /usr/local/etc/xray/config.json)
+        IP=$(curl -s http://ipinfo.io/ip)
+        
+        # 获取所有节点数量
+        NODE_COUNT=$(echo "$CONFIG" | jq '.inbounds | length')
+        
+        if [ "$NODE_COUNT" -eq 0 ]; then
+            echo -e "${YELLOW}当前没有配置任何节点${NC}"
+            return
+        fi
+        
+        echo -e "${GREEN}共有 $NODE_COUNT 个节点配置：${NC}"
+        echo "================================================================="
+        
+        # 遍历所有inbound节点
+        for ((i=0; i<$NODE_COUNT; i++)); do
+            PROTOCOL=$(echo "$CONFIG" | jq -r ".inbounds[$i].protocol")
+            PORT=$(echo "$CONFIG" | jq -r ".inbounds[$i].port")
+            
+            echo -e "${YELLOW}节点 $((i+1)) (${GREEN}$PROTOCOL${YELLOW})：${NC}"
+            echo -e "地址: ${GREEN}$IP${NC}"
+            echo -e "端口: ${GREEN}$PORT${NC}"
+            
+            # 根据协议类型显示不同的信息
+            if [ "$PROTOCOL" == "vless" ]; then
+                # VLESS节点信息
+                UUID=$(echo "$CONFIG" | jq -r ".inbounds[$i].settings.clients[0].id")
+                FLOW=$(echo "$CONFIG" | jq -r ".inbounds[$i].settings.clients[0].flow")
+                SECURITY=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.security")
+                
+                echo -e "用户ID: ${GREEN}$UUID${NC}"
+                echo -e "流控: ${GREEN}$FLOW${NC}"
+                
+                if [ "$SECURITY" == "reality" ]; then
+                    # Reality特有信息
+                    DEST=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.realitySettings.dest")
+                    SERVER_NAME=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.realitySettings.serverNames[0]")
+                    PRIVATE_KEY=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.realitySettings.privateKey")
+                    SHORT_ID=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.realitySettings.shortIds[1]")
+                    
+                    echo -e "传输协议: ${GREEN}tcp${NC}"
+                    echo -e "安全: ${GREEN}reality${NC}"
+                    echo -e "目标站点: ${GREEN}$DEST${NC}"
+                    echo -e "服务器名称: ${GREEN}$SERVER_NAME${NC}"
+                    echo -e "私钥: ${GREEN}$PRIVATE_KEY${NC}"
+                    echo -e "ShortID: ${GREEN}$SHORT_ID${NC}"
+                fi
+            elif [ "$PROTOCOL" == "shadowsocks" ]; then
+                # Shadowsocks节点信息
+                METHOD=$(echo "$CONFIG" | jq -r ".inbounds[$i].settings.method")
+                PASSWORD=$(echo "$CONFIG" | jq -r ".inbounds[$i].settings.password")
+                
+                echo -e "加密方法: ${GREEN}$METHOD${NC}"
+                echo -e "密码: ${GREEN}$PASSWORD${NC}"
+            fi
+            
+            echo "================================================================="
+        done
+    else
+        echo -e "${RED}配置文件不存在，请先安装并配置Xray${NC}"
+    fi
+}
+
 # 添加查看配置文件函数
 view_config() {
     info "Xray配置文件内容："
@@ -288,9 +358,10 @@ show_menu() {
     echo "4. 卸载Xray"
     echo "5. 查看Xray状态"
     echo "6. 查看Xray配置"
+    echo "7. 查看所有节点"
     echo "0. 退出脚本"
     echo "----------------------"
-    read -p "请输入选项 [0-6]: " option
+    read -p "请输入选项 [0-7]: " option
     
     case "$option" in
         1)
@@ -316,6 +387,9 @@ show_menu() {
             ;;
         6)
             view_config
+            ;;
+        7)
+            list_nodes
             ;;
         0)
             exit 0
