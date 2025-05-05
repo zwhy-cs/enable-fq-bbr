@@ -262,6 +262,14 @@ uninstall_xray() {
     info "Xray已卸载"
 }
 
+# 更新Xray
+update_xray() {
+    info "开始更新Xray..."
+    
+    # 使用官方脚本更新Xray
+    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
+}
+
 # 重启Xray服务
 restart_xray() {
     info "正在重启Xray服务..."
@@ -445,9 +453,10 @@ show_menu() {
     echo "7. 查看所有节点"
     echo "8. 删除指定节点"
     echo "9. 重启Xray服务"
+    echo "10. 更新Xray"
     echo "0. 退出脚本"
     echo "----------------------"
-    read -p "请输入选项 [0-9]: " option
+    read -p "请输入选项 [0-10]: " option
     
     case "$option" in
         1)
@@ -484,6 +493,10 @@ show_menu() {
         9)
             check_root
             restart_xray
+            ;;
+        10)
+            check_root
+            update_xray
             ;;
         0)
             exit 0
