@@ -269,14 +269,32 @@ delete_node_by_port() {
     
     # 读取配置文件
     if [ -f "/usr/local/etc/xray/config.json" ]; then
+        CONFIG=$(cat /usr/local/etc/xray/config.json)
+        
+        # 获取所有节点数量
+        NODE_COUNT=$(echo "$CONFIG" | jq '.inbounds | length')
+        
+        if [ "$NODE_COUNT" -eq 0 ]; then
+            echo -e "${YELLOW}当前没有配置任何节点${NC}"
+            return
+        fi
+        
+        echo -e "${GREEN}当前配置的节点列表：${NC}"
+        echo "----------------------------------------------------------------"
+        # 遍历所有inbound节点，仅显示序号、协议和端口
+        for ((i=0; i<$NODE_COUNT; i++)); do
+            PROTOCOL=$(echo "$CONFIG" | jq -r ".inbounds[$i].protocol")
+            PORT=$(echo "$CONFIG" | jq -r ".inbounds[$i].port")
+            echo -e "${YELLOW}[$((i+1))]${NC} ${GREEN}$PROTOCOL${NC} - 端口：${GREEN}$PORT${NC}"
+        done
+        echo "----------------------------------------------------------------"
+        
         read -p "请输入要删除的节点端口: " PORT
         
         if [ -z "$PORT" ]; then
             error "端口不能为空"
             return
         fi
-        
-        CONFIG=$(cat /usr/local/etc/xray/config.json)
         
         # 检查该端口是否存在
         PORT_EXISTS=$(echo "$CONFIG" | jq ".inbounds[] | select(.port == $PORT)")
@@ -286,8 +304,11 @@ delete_node_by_port() {
             return
         fi
         
+        # 获取该端口节点的协议类型
+        NODE_PROTOCOL=$(echo "$CONFIG" | jq -r ".inbounds[] | select(.port == $PORT) | .protocol")
+        
         # 询问用户确认
-        echo -e "${YELLOW}将要删除端口为 $PORT 的节点，是否继续？${NC}"
+        echo -e "${YELLOW}将要删除端口为 $PORT 的 ${GREEN}$NODE_PROTOCOL${YELLOW} 节点，是否继续？${NC}"
         read -p "请输入 [y/n]: " CONFIRM
         
         if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
@@ -307,7 +328,7 @@ delete_node_by_port() {
         # 重启Xray
         systemctl restart xray
         
-        info "成功删除端口为 $PORT 的节点"
+        info "成功删除端口为 $PORT 的 $NODE_PROTOCOL 节点"
     else
         error "配置文件不存在，请先安装并配置Xray"
     fi
