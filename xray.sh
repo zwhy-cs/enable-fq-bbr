@@ -57,13 +57,7 @@ install_xray() {
     
     # 下载Xray官方安装脚本
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
-    
-    # 检查是否安装成功
-    if [[ $? -ne 0 ]]; then
-        error "Xray安装失败"
-        exit 1
-    fi
-    
+
     info "Xray安装成功"
 }
 
@@ -78,7 +72,12 @@ configure_xray() {
     "loglevel": "debug"
   },
   "inbounds": [],
-  "outbounds": []
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    }
+  ]
 }
 EOF
 
@@ -93,18 +92,10 @@ EOF
 add_reality_node() {
     info "开始添加Reality节点..."
     
-    # 检查config.json是否存在
-    if [ ! -f "/usr/local/etc/xray/config.json" ]; then
-        error "config.json文件不存在，请先安装Xray"
-        return
-    fi
-    
-    # 生成所需的密钥和ID
     UUID=$(xray uuid)
     KEY_PAIR=$(xray x25519)
     PRIVATE_KEY=$(echo "$KEY_PAIR" | grep "Private" | awk '{print $3}')
     PUBLIC_KEY=$(echo "$KEY_PAIR" | grep "Public" | awk '{print $3}')
-    SHORT_ID=$(openssl rand -hex 8)
     
     # 询问用户输入
     read -p "请输入监听端口 [默认: 443]: " PORT
@@ -115,14 +106,12 @@ add_reality_node() {
     
     read -p "请输入服务器名称 (一般与目标网站域名相同): " SERVER_NAME
     SERVER_NAME=${SERVER_NAME:-"www.microsoft.com"}
+
+    # 读取现有配置
+    CURRENT_CONFIG=$(cat /usr/local/etc/xray/config.json)
     
-    # 直接创建完整的新配置文件，而不是修改现有的
-    cat > /usr/local/etc/xray/config.json << EOF
-{
-  "log": {
-    "loglevel": "debug"
-  },
-  "inbounds": [
+    # 创建新的inbound配置
+    NEW_INBOUND=$(cat << EOF
     {
       "port": $PORT,
       "protocol": "vless",
@@ -145,7 +134,8 @@ add_reality_node() {
           ],
           "privateKey": "$PRIVATE_KEY",
           "shortIds": [
-            "$SHORT_ID"
+            "",
+            "0123456789abcdef"
           ]
         }
       },
@@ -159,16 +149,25 @@ add_reality_node() {
         "routeOnly": true
       }
     }
-  ],
-  "outbounds": [
-    {
-      "protocol": "freedom",
-      "tag": "direct"
-    }
-  ]
-}
 EOF
+)
+
+    # 使用临时文件进行处理
+    TMP_FILE=$(mktemp)
     
+    # 使用jq合并配置
+    if ! command -v jq &> /dev/null; then
+        info "正在安装jq..."
+        if [[ "$PKGMANAGER" == "apt" ]]; then
+            apt update && apt install -y jq
+        elif [[ "$PKGMANAGER" == "yum" ]]; then
+            yum install -y jq
+        fi
+    fi
+    
+    # 将新的inbound添加到现有配置中
+    echo "$CURRENT_CONFIG" | jq ".inbounds += [$NEW_INBOUND]" > "$TMP_FILE"
+    mv "$TMP_FILE" /usr/local/etc/xray/config.json
     
     # 重启Xray
     systemctl restart xray
@@ -190,7 +189,7 @@ EOF
     echo -e "私钥: ${GREEN}$PRIVATE_KEY${NC}"
     echo -e "公钥: ${GREEN}$PUBLIC_KEY${NC}"
     echo -e "ServerName: ${GREEN}$SERVER_NAME${NC}"
-    echo -e "ShortID: ${GREEN}$SHORT_ID${NC}"
+    echo -e "ShortID: ${GREEN}0123456789abcdef${NC}"
     echo -e "Fingerprint: ${GREEN}chrome${NC}"
     echo "================================================================="
     echo ""
@@ -202,16 +201,8 @@ EOF
 uninstall_xray() {
     info "开始卸载Xray..."
     
-    # 停止服务
-    systemctl stop xray
-    systemctl disable xray
-    
-    # 使用官方脚本卸载
-    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove
-    
-    # 删除配置文件
-    rm -rf /usr/local/etc/xray
-    
+    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove --purge
+      
     info "Xray已卸载"
 }
 
