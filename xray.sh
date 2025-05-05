@@ -262,6 +262,57 @@ uninstall_xray() {
     info "Xray已卸载"
 }
 
+# 通过端口删除节点
+delete_node_by_port() {
+    info "删除指定端口的节点"
+    echo ""
+    
+    # 读取配置文件
+    if [ -f "/usr/local/etc/xray/config.json" ]; then
+        read -p "请输入要删除的节点端口: " PORT
+        
+        if [ -z "$PORT" ]; then
+            error "端口不能为空"
+            return
+        fi
+        
+        CONFIG=$(cat /usr/local/etc/xray/config.json)
+        
+        # 检查该端口是否存在
+        PORT_EXISTS=$(echo "$CONFIG" | jq ".inbounds[] | select(.port == $PORT)")
+        
+        if [ -z "$PORT_EXISTS" ]; then
+            error "未找到端口为 $PORT 的节点"
+            return
+        fi
+        
+        # 询问用户确认
+        echo -e "${YELLOW}将要删除端口为 $PORT 的节点，是否继续？${NC}"
+        read -p "请输入 [y/n]: " CONFIRM
+        
+        if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
+            info "已取消删除操作"
+            return
+        fi
+        
+        # 创建新的配置，排除指定端口的节点
+        NEW_CONFIG=$(echo "$CONFIG" | jq "del(.inbounds[] | select(.port == $PORT))")
+        
+        # 保存新配置
+        TMP_FILE=$(mktemp)
+        echo "$NEW_CONFIG" > "$TMP_FILE"
+        mv "$TMP_FILE" /usr/local/etc/xray/config.json
+        chmod 644 /usr/local/etc/xray/config.json
+        
+        # 重启Xray
+        systemctl restart xray
+        
+        info "成功删除端口为 $PORT 的节点"
+    else
+        error "配置文件不存在，请先安装并配置Xray"
+    fi
+}
+
 # 添加查看所有节点函数
 list_nodes() {
     info "当前所有节点信息："
@@ -359,9 +410,10 @@ show_menu() {
     echo "5. 查看Xray状态"
     echo "6. 查看Xray配置"
     echo "7. 查看所有节点"
+    echo "8. 删除指定节点"
     echo "0. 退出脚本"
     echo "----------------------"
-    read -p "请输入选项 [0-7]: " option
+    read -p "请输入选项 [0-8]: " option
     
     case "$option" in
         1)
@@ -390,6 +442,10 @@ show_menu() {
             ;;
         7)
             list_nodes
+            ;;
+        8)
+            check_root
+            delete_node_by_port
             ;;
         0)
             exit 0
