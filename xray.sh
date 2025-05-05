@@ -161,6 +161,7 @@ EOF
     echo "$CURRENT_CONFIG" | jq ".inbounds += [$NEW_INBOUND]" > "$TMP_FILE"
     mv "$TMP_FILE" /usr/local/etc/xray/config.json
     
+    chmod 644 /usr/local/etc/xray/config.json
     # 重启Xray
     systemctl restart xray
     
@@ -230,6 +231,7 @@ EOF
     echo "$CURRENT_CONFIG" | jq ".inbounds += [$NEW_INBOUND]" > "$TMP_FILE"
     mv "$TMP_FILE" /usr/local/etc/xray/config.json
     
+    chmod 644 /usr/local/etc/xray/config.json
     # 重启Xray
     systemctl restart xray
     
