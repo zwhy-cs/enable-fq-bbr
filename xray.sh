@@ -134,6 +134,7 @@ add_reality_node() {
             "$SERVER_NAME"
           ],
           "privateKey": "$PRIVATE_KEY",
+          "publicKey": "$PUBLIC_KEY",
           "shortIds": [
             "",
             "0123456789abcdef"
@@ -155,7 +156,6 @@ EOF
 
     # 使用临时文件进行处理
     TMP_FILE=$(mktemp)
-    
     
     # 将新的inbound添加到现有配置中
     echo "$CURRENT_CONFIG" | jq ".inbounds += [$NEW_INBOUND]" > "$TMP_FILE"
@@ -354,6 +354,39 @@ delete_node_by_port() {
     fi
 }
 
+# 生成节点订阅链接格式
+generate_subscription_link() {
+    local PROTOCOL=$1
+    local DEFAULT_IP=$2
+    local PORT=$3
+    local UUID=$4
+    local FLOW=$5
+    local SECURITY=$6
+    local DEST=$7
+    local SERVER_NAME=$8
+    local PRIVATE_KEY=$9
+    local PUBLIC_KEY=${10}
+    local METHOD=${11}
+    local PASSWORD=${12}
+    
+    if [ "$PROTOCOL" == "vless" ]; then
+        # VLESS+Reality节点链接格式
+        echo "vless://$UUID@$DEFAULT_IP:$PORT?flow=$FLOW&security=$SECURITY&sni=$SERVER_NAME&fp=chrome&pbk=$PUBLIC_KEY&sid=0123456789abcdef&type=tcp&encryption=none#Reality_${PORT}"
+    elif [ "$PROTOCOL" == "shadowsocks" ]; then
+        # 提示用户输入IP地址
+        read -p "请输入IP地址 [默认: $DEFAULT_IP]: " INPUT_IP
+        IP=${INPUT_IP:-$DEFAULT_IP}
+        
+        # 提示用户输入端口
+        read -p "请输入端口 [默认: $PORT]: " INPUT_PORT
+        PORT=${INPUT_PORT:-$PORT}
+        
+        # Shadowsocks节点链接格式 (ss://BASE64(method:password)@server:port#name)
+        local SS_INFO=$(echo -n "$METHOD:$PASSWORD" | base64 | tr -d '\n')
+        echo "ss://$SS_INFO@$IP:$PORT#Shadowsocks_${PORT}"
+    fi
+}
+
 # 添加查看所有节点函数
 list_nodes() {
     info "当前所有节点信息："
@@ -399,6 +432,7 @@ list_nodes() {
                     DEST=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.realitySettings.dest")
                     SERVER_NAME=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.realitySettings.serverNames[0]")
                     PRIVATE_KEY=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.realitySettings.privateKey")
+                    PUBLIC_KEY=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.realitySettings.publicKey // \"未找到公钥\"")
                     SHORT_ID=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.realitySettings.shortIds[1]")
                     
                     echo -e "传输协议: ${GREEN}tcp${NC}"
@@ -406,7 +440,12 @@ list_nodes() {
                     echo -e "目标站点: ${GREEN}$DEST${NC}"
                     echo -e "服务器名称: ${GREEN}$SERVER_NAME${NC}"
                     echo -e "私钥: ${GREEN}$PRIVATE_KEY${NC}"
+                    echo -e "公钥: ${GREEN}$PUBLIC_KEY${NC}"
                     echo -e "ShortID: ${GREEN}$SHORT_ID${NC}"
+                    
+                    # 生成订阅链接
+                    SUB_LINK=$(generate_subscription_link "vless" "$IP" "$PORT" "$UUID" "$FLOW" "$SECURITY" "$DEST" "$SERVER_NAME" "$PRIVATE_KEY" "$PUBLIC_KEY")
+                    echo -e "${YELLOW}订阅链接: ${GREEN}$SUB_LINK${NC}"
                 fi
             elif [ "$PROTOCOL" == "shadowsocks" ]; then
                 # Shadowsocks节点信息
@@ -415,6 +454,10 @@ list_nodes() {
                 
                 echo -e "加密方法: ${GREEN}$METHOD${NC}"
                 echo -e "密码: ${GREEN}$PASSWORD${NC}"
+                
+                # 生成订阅链接
+                SUB_LINK=$(generate_subscription_link "shadowsocks" "$IP" "$PORT" "" "" "" "" "" "" "" "$METHOD" "$PASSWORD")
+                echo -e "${YELLOW}订阅链接: ${GREEN}$SUB_LINK${NC}"
             fi
             
             echo "================================================================="
