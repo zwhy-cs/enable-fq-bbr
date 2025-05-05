@@ -389,13 +389,12 @@ generate_subscription_link() {
 
 # 添加查看所有节点函数
 list_nodes() {
-    info "当前所有节点信息："
+    info "查看节点信息"
     echo ""
     
     # 读取配置文件
     if [ -f "/usr/local/etc/xray/config.json" ]; then
         CONFIG=$(cat /usr/local/etc/xray/config.json)
-        IP=$(curl -s http://ipinfo.io/ip)
         
         # 获取所有节点数量
         NODE_COUNT=$(echo "$CONFIG" | jq '.inbounds | length')
@@ -405,63 +404,83 @@ list_nodes() {
             return
         fi
         
-        echo -e "${GREEN}共有 $NODE_COUNT 个节点配置：${NC}"
-        echo "================================================================="
-        
-        # 遍历所有inbound节点
+        # 首先列出所有节点的简要信息
+        echo -e "${GREEN}当前配置的节点列表：${NC}"
+        echo "----------------------------------------------------------------"
         for ((i=0; i<$NODE_COUNT; i++)); do
             PROTOCOL=$(echo "$CONFIG" | jq -r ".inbounds[$i].protocol")
             PORT=$(echo "$CONFIG" | jq -r ".inbounds[$i].port")
+            echo -e "${YELLOW}[$((i+1))]${NC} ${GREEN}$PROTOCOL${NC} - 端口：${GREEN}$PORT${NC}"
+        done
+        echo "----------------------------------------------------------------"
+        
+        # 询问用户要查看哪个节点的详细信息
+        read -p "请输入要查看的节点序号 [1-$NODE_COUNT]: " NODE_INDEX
+        
+        # 验证用户输入
+        if ! [[ "$NODE_INDEX" =~ ^[0-9]+$ ]] || [ "$NODE_INDEX" -lt 1 ] || [ "$NODE_INDEX" -gt "$NODE_COUNT" ]; then
+            error "无效的序号，请输入1到$NODE_COUNT之间的数字"
+            return
+        fi
+        
+        # 计算实际数组索引
+        i=$((NODE_INDEX-1))
+        
+        # 获取节点信息
+        PROTOCOL=$(echo "$CONFIG" | jq -r ".inbounds[$i].protocol")
+        PORT=$(echo "$CONFIG" | jq -r ".inbounds[$i].port")
+        IP=$(curl -s http://ipinfo.io/ip)
+        
+        echo ""
+        echo "================================================================="
+        echo -e "${YELLOW}节点 $NODE_INDEX (${GREEN}$PROTOCOL${YELLOW})：${NC}"
+        echo -e "地址: ${GREEN}$IP${NC}"
+        echo -e "端口: ${GREEN}$PORT${NC}"
+        
+        # 根据协议类型显示不同的信息
+        if [ "$PROTOCOL" == "vless" ]; then
+            # VLESS节点信息
+            UUID=$(echo "$CONFIG" | jq -r ".inbounds[$i].settings.clients[0].id")
+            FLOW=$(echo "$CONFIG" | jq -r ".inbounds[$i].settings.clients[0].flow")
+            SECURITY=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.security")
             
-            echo -e "${YELLOW}节点 $((i+1)) (${GREEN}$PROTOCOL${YELLOW})：${NC}"
-            echo -e "地址: ${GREEN}$IP${NC}"
-            echo -e "端口: ${GREEN}$PORT${NC}"
+            echo -e "用户ID: ${GREEN}$UUID${NC}"
+            echo -e "流控: ${GREEN}$FLOW${NC}"
             
-            # 根据协议类型显示不同的信息
-            if [ "$PROTOCOL" == "vless" ]; then
-                # VLESS节点信息
-                UUID=$(echo "$CONFIG" | jq -r ".inbounds[$i].settings.clients[0].id")
-                FLOW=$(echo "$CONFIG" | jq -r ".inbounds[$i].settings.clients[0].flow")
-                SECURITY=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.security")
+            if [ "$SECURITY" == "reality" ]; then
+                # Reality特有信息
+                DEST=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.realitySettings.dest")
+                SERVER_NAME=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.realitySettings.serverNames[0]")
+                PRIVATE_KEY=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.realitySettings.privateKey")
+                PUBLIC_KEY=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.realitySettings.publicKey // \"未找到公钥\"")
+                SHORT_ID=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.realitySettings.shortIds[1]")
                 
-                echo -e "用户ID: ${GREEN}$UUID${NC}"
-                echo -e "流控: ${GREEN}$FLOW${NC}"
-                
-                if [ "$SECURITY" == "reality" ]; then
-                    # Reality特有信息
-                    DEST=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.realitySettings.dest")
-                    SERVER_NAME=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.realitySettings.serverNames[0]")
-                    PRIVATE_KEY=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.realitySettings.privateKey")
-                    PUBLIC_KEY=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.realitySettings.publicKey // \"未找到公钥\"")
-                    SHORT_ID=$(echo "$CONFIG" | jq -r ".inbounds[$i].streamSettings.realitySettings.shortIds[1]")
-                    
-                    echo -e "传输协议: ${GREEN}tcp${NC}"
-                    echo -e "安全: ${GREEN}reality${NC}"
-                    echo -e "目标站点: ${GREEN}$DEST${NC}"
-                    echo -e "服务器名称: ${GREEN}$SERVER_NAME${NC}"
-                    echo -e "私钥: ${GREEN}$PRIVATE_KEY${NC}"
-                    echo -e "公钥: ${GREEN}$PUBLIC_KEY${NC}"
-                    echo -e "ShortID: ${GREEN}$SHORT_ID${NC}"
-                    
-                    # 生成订阅链接
-                    SUB_LINK=$(generate_subscription_link "vless" "$IP" "$PORT" "$UUID" "$FLOW" "$SECURITY" "$DEST" "$SERVER_NAME" "$PRIVATE_KEY" "$PUBLIC_KEY")
-                    echo -e "${YELLOW}订阅链接: ${GREEN}$SUB_LINK${NC}"
-                fi
-            elif [ "$PROTOCOL" == "shadowsocks" ]; then
-                # Shadowsocks节点信息
-                METHOD=$(echo "$CONFIG" | jq -r ".inbounds[$i].settings.method")
-                PASSWORD=$(echo "$CONFIG" | jq -r ".inbounds[$i].settings.password")
-                
-                echo -e "加密方法: ${GREEN}$METHOD${NC}"
-                echo -e "密码: ${GREEN}$PASSWORD${NC}"
+                echo -e "传输协议: ${GREEN}tcp${NC}"
+                echo -e "安全: ${GREEN}reality${NC}"
+                echo -e "目标站点: ${GREEN}$DEST${NC}"
+                echo -e "服务器名称: ${GREEN}$SERVER_NAME${NC}"
+                echo -e "私钥: ${GREEN}$PRIVATE_KEY${NC}"
+                echo -e "公钥: ${GREEN}$PUBLIC_KEY${NC}"
+                echo -e "ShortID: ${GREEN}$SHORT_ID${NC}"
                 
                 # 生成订阅链接
-                SUB_LINK=$(generate_subscription_link "shadowsocks" "$IP" "$PORT" "" "" "" "" "" "" "" "$METHOD" "$PASSWORD")
+                SUB_LINK=$(generate_subscription_link "vless" "$IP" "$PORT" "$UUID" "$FLOW" "$SECURITY" "$DEST" "$SERVER_NAME" "$PRIVATE_KEY" "$PUBLIC_KEY")
                 echo -e "${YELLOW}订阅链接: ${GREEN}$SUB_LINK${NC}"
             fi
+        elif [ "$PROTOCOL" == "shadowsocks" ]; then
+            # Shadowsocks节点信息
+            METHOD=$(echo "$CONFIG" | jq -r ".inbounds[$i].settings.method")
+            PASSWORD=$(echo "$CONFIG" | jq -r ".inbounds[$i].settings.password")
             
-            echo "================================================================="
-        done
+            echo -e "加密方法: ${GREEN}$METHOD${NC}"
+            echo -e "密码: ${GREEN}$PASSWORD${NC}"
+            
+            # 生成订阅链接
+            SUB_LINK=$(generate_subscription_link "shadowsocks" "$IP" "$PORT" "" "" "" "" "" "" "" "$METHOD" "$PASSWORD")
+            echo -e "${YELLOW}订阅链接: ${GREEN}$SUB_LINK${NC}"
+        fi
+        
+        echo "================================================================="
     else
         echo -e "${RED}配置文件不存在，请先安装并配置Xray${NC}"
     fi
