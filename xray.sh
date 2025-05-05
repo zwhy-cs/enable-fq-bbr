@@ -262,9 +262,9 @@ uninstall_xray() {
     info "Xray已卸载"
 }
 
-# 通过端口删除节点
+# 通过序号删除节点
 delete_node_by_port() {
-    info "删除指定端口的节点"
+    info "删除节点"
     echo ""
     
     # 读取配置文件
@@ -281,7 +281,7 @@ delete_node_by_port() {
         
         echo -e "${GREEN}当前配置的节点列表：${NC}"
         echo "----------------------------------------------------------------"
-        # 遍历所有inbound节点，仅显示序号、协议和端口
+        # 遍历所有inbound节点，显示序号、协议和端口
         for ((i=0; i<$NODE_COUNT; i++)); do
             PROTOCOL=$(echo "$CONFIG" | jq -r ".inbounds[$i].protocol")
             PORT=$(echo "$CONFIG" | jq -r ".inbounds[$i].port")
@@ -289,26 +289,31 @@ delete_node_by_port() {
         done
         echo "----------------------------------------------------------------"
         
-        read -p "请输入要删除的节点端口: " PORT
+        read -p "请输入要删除的节点序号: " INDEX
         
-        if [ -z "$PORT" ]; then
-            error "端口不能为空"
+        if [ -z "$INDEX" ]; then
+            error "序号不能为空"
             return
         fi
         
-        # 检查该端口是否存在
-        PORT_EXISTS=$(echo "$CONFIG" | jq ".inbounds[] | select(.port == $PORT)")
-        
-        if [ -z "$PORT_EXISTS" ]; then
-            error "未找到端口为 $PORT 的节点"
+        # 检查序号是否有效
+        if ! [[ "$INDEX" =~ ^[0-9]+$ ]]; then
+            error "请输入有效的数字序号"
             return
         fi
         
-        # 获取该端口节点的协议类型
-        NODE_PROTOCOL=$(echo "$CONFIG" | jq -r ".inbounds[] | select(.port == $PORT) | .protocol")
+        if [ "$INDEX" -le 0 ] || [ "$INDEX" -gt "$NODE_COUNT" ]; then
+            error "无效的序号，请输入1到$NODE_COUNT之间的数字"
+            return
+        fi
+        
+        # 计算实际索引并获取节点信息
+        ACTUAL_INDEX=$((INDEX-1))
+        PORT=$(echo "$CONFIG" | jq -r ".inbounds[$ACTUAL_INDEX].port")
+        NODE_PROTOCOL=$(echo "$CONFIG" | jq -r ".inbounds[$ACTUAL_INDEX].protocol")
         
         # 询问用户确认
-        echo -e "${YELLOW}将要删除端口为 $PORT 的 ${GREEN}$NODE_PROTOCOL${YELLOW} 节点，是否继续？${NC}"
+        echo -e "${YELLOW}将要删除序号 $INDEX (${GREEN}$NODE_PROTOCOL${YELLOW} - 端口：${GREEN}$PORT${YELLOW}) 的节点，是否继续？${NC}"
         read -p "请输入 [y/n]: " CONFIRM
         
         if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
@@ -316,8 +321,8 @@ delete_node_by_port() {
             return
         fi
         
-        # 创建新的配置，排除指定端口的节点
-        NEW_CONFIG=$(echo "$CONFIG" | jq "del(.inbounds[] | select(.port == $PORT))")
+        # 创建新的配置，删除指定索引的节点
+        NEW_CONFIG=$(echo "$CONFIG" | jq "del(.inbounds[$ACTUAL_INDEX])")
         
         # 保存新配置
         TMP_FILE=$(mktemp)
@@ -328,7 +333,7 @@ delete_node_by_port() {
         # 重启Xray
         systemctl restart xray
         
-        info "成功删除端口为 $PORT 的 $NODE_PROTOCOL 节点"
+        info "成功删除序号 $INDEX 的 $NODE_PROTOCOL 节点 (端口: $PORT)"
     else
         error "配置文件不存在，请先安装并配置Xray"
     fi
