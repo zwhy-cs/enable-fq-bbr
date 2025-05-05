@@ -262,6 +262,13 @@ uninstall_xray() {
     info "Xray已卸载"
 }
 
+# 重启Xray服务
+restart_xray() {
+    info "正在重启Xray服务..."
+
+    systemctl restart xray
+}
+
 # 通过序号删除节点
 delete_node_by_port() {
     info "删除节点"
@@ -437,9 +444,10 @@ show_menu() {
     echo "6. 查看Xray配置"
     echo "7. 查看所有节点"
     echo "8. 删除指定节点"
+    echo "9. 重启Xray服务"
     echo "0. 退出脚本"
     echo "----------------------"
-    read -p "请输入选项 [0-8]: " option
+    read -p "请输入选项 [0-9]: " option
     
     case "$option" in
         1)
@@ -472,6 +480,10 @@ show_menu() {
         8)
             check_root
             delete_node_by_port
+            ;;
+        9)
+            check_root
+            restart_xray
             ;;
         0)
             exit 0
