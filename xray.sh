@@ -58,7 +58,7 @@ install_xray() {
     
     # 下载Xray官方安装脚本
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
-
+    apt install jq
     info "Xray安装成功"
 }
 
