@@ -400,5 +400,14 @@ show_menu() {
     esac
 }
 
-# 执行主菜单
-show_menu
+# 主函数循环
+main() {
+    while true; do
+        show_menu
+        echo ""
+        read -p "按回车键继续..." continue_key
+    done
+}
+
+# 执行主函数
+main
