@@ -51,6 +51,7 @@ check_system() {
     info "包管理器: $PKGMANAGER"
 }
 
+
 # 安装Xray
 install_xray() {
     info "开始安装Xray..."
@@ -155,15 +156,6 @@ EOF
     # 使用临时文件进行处理
     TMP_FILE=$(mktemp)
     
-    # 使用jq合并配置
-    if ! command -v jq &> /dev/null; then
-        info "正在安装jq..."
-        if [[ "$PKGMANAGER" == "apt" ]]; then
-            apt update && apt install -y jq
-        elif [[ "$PKGMANAGER" == "yum" ]]; then
-            yum install -y jq
-        fi
-    fi
     
     # 将新的inbound添加到现有配置中
     echo "$CURRENT_CONFIG" | jq ".inbounds += [$NEW_INBOUND]" > "$TMP_FILE"
@@ -197,6 +189,68 @@ EOF
     info "Reality节点配置完成"
 }
 
+# 添加Shadowsocks节点
+add_ss_node() {
+    info "开始添加Shadowsocks节点..."
+    
+    # 生成随机密码
+    PASSWORD=$(openssl rand -base64 16)
+    
+    # 询问用户输入
+    read -p "请输入监听端口 [默认: 1234]: " PORT
+    PORT=${PORT:-1234}
+    
+    read -p "请输入加密方法 [默认: 2022-blake3-aes-128-gcm]: " METHOD
+    METHOD=${METHOD:-"2022-blake3-aes-128-gcm"}
+    
+    read -p "请输入密码 [默认随机生成]: " USER_PASSWORD
+    PASSWORD=${USER_PASSWORD:-$PASSWORD}
+
+    # 读取现有配置
+    CURRENT_CONFIG=$(cat /usr/local/etc/xray/config.json)
+    
+    # 创建新的inbound配置
+    NEW_INBOUND=$(cat << EOF
+    {
+      "port": $PORT,
+      "protocol": "shadowsocks",
+      "settings": {
+        "method": "$METHOD",
+        "password": "$PASSWORD",
+        "network": "tcp,udp"
+      }
+    }
+EOF
+)
+
+    # 使用临时文件进行处理
+    TMP_FILE=$(mktemp)
+    
+    # 将新的inbound添加到现有配置中
+    echo "$CURRENT_CONFIG" | jq ".inbounds += [$NEW_INBOUND]" > "$TMP_FILE"
+    mv "$TMP_FILE" /usr/local/etc/xray/config.json
+    
+    # 重启Xray
+    systemctl restart xray
+    
+    # 显示节点信息
+    IP=$(curl -s http://ipinfo.io/ip)
+    
+    echo ""
+    echo "================================================================="
+    echo -e "${GREEN}Shadowsocks节点添加成功!${NC}"
+    echo -e "${YELLOW}节点配置信息：${NC}"
+    echo -e "协议: ${GREEN}Shadowsocks${NC}"
+    echo -e "地址: ${GREEN}$IP${NC}"
+    echo -e "端口: ${GREEN}$PORT${NC}"
+    echo -e "加密方法: ${GREEN}$METHOD${NC}"
+    echo -e "密码: ${GREEN}$PASSWORD${NC}"
+    echo "================================================================="
+    echo ""
+    
+    info "Shadowsocks节点配置完成"
+}
+
 # 卸载Xray
 uninstall_xray() {
     info "开始卸载Xray..."
@@ -220,11 +274,12 @@ show_menu() {
     echo "----------------------"
     echo "1. 安装Xray"
     echo "2. 添加Reality节点"
-    echo "3. 卸载Xray"
-    echo "4. 查看Xray状态"
+    echo "3. 添加Shadowsocks节点"
+    echo "4. 卸载Xray"
+    echo "5. 查看Xray状态"
     echo "0. 退出脚本"
     echo "----------------------"
-    read -p "请输入选项 [0-4]: " option
+    read -p "请输入选项 [0-5]: " option
     
     case "$option" in
         1)
@@ -239,9 +294,13 @@ show_menu() {
             ;;
         3)
             check_root
-            uninstall_xray
+            add_ss_node
             ;;
         4)
+            check_root
+            uninstall_xray
+            ;;
+        5)
             check_status
             ;;
         0)
