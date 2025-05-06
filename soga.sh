@@ -37,6 +37,7 @@ enable_show_menu() {
   echo "4) 添加节点"
   echo "5) 删除节点"
   echo "6) 检查服务状态"
+  echo "7) 更新 Soga"
   echo "0) 退出"
   echo "========================================="
 }
@@ -230,10 +231,25 @@ check_services() {
   read -p "按回车键返回菜单..." _
 }
 
+# 更新soga
+update_soga() {
+  echo " >>> 更新 Soga..."
+  if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
+  
+  echo "正在更新 Soga 镜像..."
+  docker compose -f "$COMPOSE_FILE" pull
+  
+  echo "正在重启服务..."
+  docker compose -f "$COMPOSE_FILE" up -d
+  
+  echo "Soga 已更新至最新版本。"
+  read -p "按回车键返回菜单..." _
+}
+
 # 主循环
 while true; do
   enable_show_menu
-  read -p "请输入选项 [0-6]: " choice
+  read -p "请输入选项 [0-7]: " choice
   case "$choice" in
     1) install_soga  ;; 
     2) edit_soga     ;; 
@@ -241,6 +257,7 @@ while true; do
     4) add_node      ;; 
     5) delete_node   ;; 
     6) check_services;; 
+    7) update_soga   ;;
     0) echo "退出脚本。"; exit 0 ;; 
     *) echo "无效选项，请重新输入。"; read -p "按回车键继续..." _;;
   esac
