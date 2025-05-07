@@ -53,6 +53,7 @@ services:
       - SERVER=127.0.0.1:45678
       - TLS=cloud.tencent.com:443
       - PASSWORD=${SHADOW_TLS_PASSWORD}
+      - V3=1
 EOF
 
     # 创建shadowsocks-rust的配置文件
