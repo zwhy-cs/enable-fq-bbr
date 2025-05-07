@@ -96,7 +96,7 @@ show_config() {
     echo -e "${YELLOW}Shadowsocks 密码: ${PLAIN}${SS_PASSWORD}"
     echo -e "${YELLOW}Shadow-TLS 密码: ${PLAIN}${SHADOW_TLS_PASSWORD}"
     echo -e "${YELLOW}Shadow-TLS 版本: ${PLAIN}v3"
-    echo -e "${YELLOW}混淆域名: ${PLAIN}cloud.tencent.com:443"
+    echo -e "${YELLOW}混淆域名: ${PLAIN}icloud.com:443"
     echo -e "${GREEN}======================================================${PLAIN}"
     echo -e "${GREEN}配置文件路径: /etc/shadowsocks-docker/config.json${PLAIN}"
     echo -e "${GREEN}重启命令: cd /etc/shadowsocks-docker && docker compose restart${PLAIN}"
