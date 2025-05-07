@@ -75,8 +75,8 @@ start_service() {
 # 显示配置信息
 show_config() {
     IP=$(curl -s https://api.ipify.org)
-    SS_PASSWORD=$(grep "PASSWORD=" /etc/shadowsocks-docker/docker-compose.yml | head -1 | cut -d'=' -f2)
-    SHADOW_TLS_PASSWORD=$(grep "PASSWORD=" /etc/shadowsocks-docker/docker-compose.yml | tail -1 | cut -d'=' -f2)
+    SS_PASSWORD=$(grep "PASSWORD=" /etc/shadowsocks-docker/docker-compose.yml | head -1 | cut -d'=' -f2- | tr -d ' ')
+    SHADOW_TLS_PASSWORD=$(grep "PASSWORD=" /etc/shadowsocks-docker/docker-compose.yml | tail -1 | cut -d'=' -f2- | tr -d ' ')
 
     echo -e "${GREEN}======================================================${PLAIN}"
     echo -e "${GREEN}Shadowsocks + Shadow-TLS 安装成功！${PLAIN}"
