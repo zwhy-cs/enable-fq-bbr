@@ -34,18 +34,15 @@ create_config() {
     # 创建docker-compose.yml
     mkdir -p /etc/shadowsocks-docker
     cat > /etc/shadowsocks-docker/docker-compose.yml << EOF
-version: '2.4'
+version: '3.0'
 services:
   shadowsocks:
-    image: shadowsocks/shadowsocks-libev
+    image: ghcr.io/shadowsocks/ssserver-rust:latest
     container_name: shadowsocks-raw
     restart: always
     network_mode: "host"
-    environment:
-      - SERVER_PORT=45678
-      - SERVER_ADDR=127.0.0.1
-      - METHOD=2022-blake3-aes-128-gcm
-      - PASSWORD=${SS_PASSWORD}
+    volumes:
+      - /etc/shadowsocks-docker/config.json:/etc/shadowsocks-rust/config.json
   shadow-tls:
     image: ghcr.io/ihciah/shadow-tls:latest
     restart: always
@@ -56,6 +53,17 @@ services:
       - SERVER=127.0.0.1:45678
       - TLS=cloud.tencent.com:443
       - PASSWORD=${SHADOW_TLS_PASSWORD}
+EOF
+
+    # 创建shadowsocks-rust的配置文件
+    cat > /etc/shadowsocks-docker/config.json << EOF
+{
+    "server": "127.0.0.1",
+    "server_port": 45678,
+    "password": "${SS_PASSWORD}",
+    "method": "2022-blake3-aes-128-gcm",
+    "mode": "tcp_and_udp",
+}
 EOF
 
     echo -e "${GREEN}配置文件创建完成${PLAIN}"
@@ -75,7 +83,7 @@ start_service() {
 # 显示配置信息
 show_config() {
     IP=$(curl -s https://api.ipify.org)
-    SS_PASSWORD=$(grep "PASSWORD=" /etc/shadowsocks-docker/docker-compose.yml | head -1 | cut -d'=' -f2- | tr -d ' ')
+    SS_PASSWORD=$(grep "\"password\":" /etc/shadowsocks-docker/config.json | cut -d'"' -f4)
     SHADOW_TLS_PASSWORD=$(grep "PASSWORD=" /etc/shadowsocks-docker/docker-compose.yml | tail -1 | cut -d'=' -f2- | tr -d ' ')
 
     echo -e "${GREEN}======================================================${PLAIN}"
@@ -89,7 +97,7 @@ show_config() {
     echo -e "${YELLOW}Shadow-TLS 版本: ${PLAIN}v3"
     echo -e "${YELLOW}混淆域名: ${PLAIN}cloud.tencent.com:443"
     echo -e "${GREEN}======================================================${PLAIN}"
-    echo -e "${GREEN}配置文件路径: /etc/shadowsocks-docker/docker-compose.yml${PLAIN}"
+    echo -e "${GREEN}配置文件路径: /etc/shadowsocks-docker/config.json${PLAIN}"
     echo -e "${GREEN}重启命令: cd /etc/shadowsocks-docker && docker compose restart${PLAIN}"
     echo -e "${GREEN}停止命令: cd /etc/shadowsocks-docker && docker compose down${PLAIN}"
     echo -e "${GREEN}======================================================${PLAIN}"
