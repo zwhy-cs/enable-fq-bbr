@@ -51,7 +51,7 @@ services:
       - MODE=server
       - LISTEN=0.0.0.0:8443
       - SERVER=127.0.0.1:45678
-      - TLS=cloud.tencent.com:443
+      - TLS=icloud.com:443
       - PASSWORD=${SHADOW_TLS_PASSWORD}
       - V3=1
 EOF
