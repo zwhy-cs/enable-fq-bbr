@@ -96,6 +96,20 @@ function issueSSL() {
         yellow "私钥路径: $certDir/private.key"
         yellow "证书路径: $certDir/fullchain.crt"
         
+        # 设置证书自动续期并配置续期后的部署脚本
+        yellow "配置证书自动续期..."
+        cat > ~/renew-cert.sh << RENEW
+#!/bin/bash
+cp $certDir/private.key /etc/ssl/private/private.key
+cp $certDir/fullchain.crt /etc/ssl/private/fullchain.cer
+systemctl restart nginx
+RENEW
+        chmod +x ~/renew-cert.sh
+        ~/.acme.sh/acme.sh --upgrade --auto-upgrade
+        ~/.acme.sh/acme.sh --renew -d "$domain" --force --renew-hook "~/renew-cert.sh"
+        
+        green "证书自动续期已配置，将每60天自动续期一次"
+        
         # 保存域名变量供后续使用
         echo "$domain" > /tmp/domain_name.txt
     else
@@ -109,16 +123,40 @@ function installNginx() {
     yellow "开始安装Nginx..."
     
     if [ "$release" == "centos" ]; then
-        apt install -y nginx
+        sudo apt update && sudo apt upgrade -y && apt-get install -y gcc g++ libpcre3 libpcre3-dev zlib1g zlib1g-dev openssl libssl-dev wget sudo make curl socat cron && wget https://nginx.org/download/nginx-1.27.1.tar.gz && tar -xvf nginx-1.27.1.tar.gz && cd nginx-1.27.1 && ./configure --prefix=/usr/local/nginx --sbin-path=/usr/sbin/nginx --conf-path=/etc/nginx/nginx.conf --with-http_stub_status_module --with-http_ssl_module --with-http_realip_module --with-http_sub_module --with-stream --with-stream_ssl_module --with-stream_ssl_preread_module --with-http_v2_module && make && make install && cd
     else
-        apt update
-        apt install -y nginx
+        sudo apt update && sudo apt upgrade -y && apt-get install -y gcc g++ libpcre3 libpcre3-dev zlib1g zlib1g-dev openssl libssl-dev wget sudo make curl socat cron && wget https://nginx.org/download/nginx-1.27.1.tar.gz && tar -xvf nginx-1.27.1.tar.gz && cd nginx-1.27.1 && ./configure --prefix=/usr/local/nginx --sbin-path=/usr/sbin/nginx --conf-path=/etc/nginx/nginx.conf --with-http_stub_status_module --with-http_ssl_module --with-http_realip_module --with-http_sub_module --with-stream --with-stream_ssl_module --with-stream_ssl_preread_module --with-http_v2_module && make && make install && cd
     fi
     
     if [ $? -ne 0 ]; then
         red "Nginx安装失败，请检查错误信息"
         exit 1
     fi
+    
+    # 创建nginx systemd服务文件
+    yellow "创建nginx.service文件..."
+    cat > /etc/systemd/system/nginx.service << EOF
+[Unit]
+Description=A high performance web server and a reverse proxy server
+Documentation=man:nginx(8)
+After=network.target nss-lookup.target
+
+[Service]
+Type=forking
+PIDFile=/usr/local/nginx/logs/nginx.pid
+ExecStartPre=/usr/sbin/nginx -t -q -g 'daemon on; master_process on;'
+ExecStart=/usr/sbin/nginx -g 'daemon on; master_process on;'
+ExecReload=/usr/sbin/nginx -g 'daemon on; master_process on;' -s reload
+ExecStop=-/sbin/start-stop-daemon --quiet --stop --retry QUIT/5 --pidfile /run/nginx.pid
+TimeoutStopSec=5
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # 重新加载systemd配置
+    systemctl daemon-reload
     
     systemctl enable nginx
     
@@ -160,18 +198,17 @@ function configureNginx() {
     cp $certDir/private.key /etc/ssl/private/private.key
     cp $certDir/fullchain.crt /etc/ssl/private/fullchain.cer
     
-    # 备份原始配置
-    if [ -f "/etc/nginx/nginx.conf" ]; then
-        cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak
-    fi
-    
     # 读取用户输入
     read -p "请输入要反向代理的目标网站(默认为www.lovelive-anime.jp): " targetSite
     targetSite=${targetSite:-www.lovelive-anime.jp}
     
+    # 安装GeoIP依赖
+    yellow "安装GeoIP依赖..."
+    apt-get update && apt-get install -y geoip-database libgeoip-dev
+
     # 创建Nginx配置文件
     cat > /etc/nginx/nginx.conf << EOF
-user www-data;
+user root;
 worker_processes auto;
 
 error_log /usr/local/nginx/logs/error.log notice;
@@ -184,6 +221,9 @@ events {
 http {
     log_format main '[\$time_local] \$proxy_protocol_addr "\$http_referer" "\$http_user_agent"';
     access_log /usr/local/nginx/logs/access.log main;
+
+    # 加载GeoIP模块
+    geoip_country /usr/share/GeoIP/GeoIP.dat;
 
     map \$http_upgrade \$connection_upgrade {
         default upgrade;
@@ -221,13 +261,12 @@ http {
     }
 
     server {
-        listen                     127.0.0.1:8003 ssl proxy_protocol;
-        listen                     443 ssl;
-        
+        listen                     127.0.0.1:8003 ssl http2 proxy_protocol;
+
         set_real_ip_from           127.0.0.1;
         real_ip_header             proxy_protocol;
 
-        server_name                $domain;
+        server_name                $domain; # 填由 Nginx 加载的 SSL 证书中包含的域名，建议将域名指向服务端的 IP
 
         ssl_certificate            /etc/ssl/private/fullchain.cer;
         ssl_certificate_key        /etc/ssl/private/private.key;
@@ -243,6 +282,11 @@ http {
         resolver_timeout           2s;
 
         location / {
+            # 禁止中国大陆IP访问
+            if ($geoip_country_code = "CN") {
+                return 403;
+            }
+            
             sub_filter                            \$proxy_host \$host;
             sub_filter_once                       off;
 
