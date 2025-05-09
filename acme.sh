@@ -150,7 +150,7 @@ function configureNginx() {
     
     # 创建Nginx配置文件
     cat > /etc/nginx/nginx.conf << EOF
-user root;
+user nginx;
 worker_processes auto;
 
 error_log /usr/local/nginx/logs/error.log notice;
@@ -201,7 +201,7 @@ http {
 
     server {
         listen                     127.0.0.1:8003 ssl proxy_protocol;
-
+        http2                      on;
         set_real_ip_from           127.0.0.1;
         real_ip_header             proxy_protocol;
 
