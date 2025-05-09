@@ -24,6 +24,18 @@ function blue() {
     echo -e "${BLUE}$1${PLAIN}"
 }
 
+# 安装sudo
+function installSudo() {
+    yellow "安装sudo..."
+    apt install sudo -y
+    if [ $? -ne 0 ]; then
+        red "sudo安装失败，请检查错误信息"
+        exit 1
+    else
+        green "sudo安装成功!"
+    fi
+}
+
 # 安装acme.sh
 function installAcme() {
     if [ ! -f ~/.acme.sh/acme.sh ]; then
@@ -38,7 +50,11 @@ function installAcme() {
         ~/.acme.sh/acme.sh --upgrade
     fi
     
-    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
+    # 添加软链接
+    ln -s  /root/.acme.sh/acme.sh /usr/local/bin/acme.sh
+    
+    # 切换CA机构
+    acme.sh --set-default-ca --server letsencrypt
     if [ $? -ne 0 ]; then
         red "设置默认CA失败，请检查错误信息"
         exit 1
@@ -73,7 +89,7 @@ function issueSSL() {
     fi
     
     # 使用API模式申请证书
-    ~/.acme.sh/acme.sh --issue --dns dns_cf -d "$domain" --force
+    acme.sh --issue --dns dns_cf -d "$domain"
     
     if [ $? -ne 0 ]; then
         red "证书申请失败，请检查域名和API设置是否正确"
@@ -83,32 +99,17 @@ function issueSSL() {
     fi
     
     # 创建证书目录
-    certDir="/root/cert/$domain"
-    mkdir -p $certDir
+    mkdir -p /etc/ssl/private/
     
-    # 安装证书到指定目录
-    ~/.acme.sh/acme.sh --install-cert -d "$domain" \
-        --key-file       $certDir/private.key  \
-        --fullchain-file $certDir/fullchain.crt
+    # 安装证书到指定目录，不添加重载命令，因为nginx可能尚未安装
+    acme.sh --install-cert -d "$domain" --ecc \
+        --key-file /etc/ssl/private/private.key  \
+        --fullchain-file /etc/ssl/private/fullchain.cer
     
     if [ $? -eq 0 ]; then
-        green "证书已安装至 $certDir"
-        yellow "私钥路径: $certDir/private.key"
-        yellow "证书路径: $certDir/fullchain.crt"
-        
-        # 设置证书自动续期并配置续期后的部署脚本
-        yellow "配置证书自动续期..."
-        cat > ~/renew-cert.sh << RENEW
-#!/bin/bash
-cp $certDir/private.key /etc/ssl/private/private.key
-cp $certDir/fullchain.crt /etc/ssl/private/fullchain.cer
-systemctl restart nginx
-RENEW
-        chmod +x ~/renew-cert.sh
-        ~/.acme.sh/acme.sh --upgrade --auto-upgrade
-        ~/.acme.sh/acme.sh --renew -d "$domain" --force --renew-hook "~/renew-cert.sh"
-        
-        green "证书自动续期已配置，将每60天自动续期一次"
+        green "证书已安装至 /etc/ssl/private/"
+        yellow "私钥路径: /etc/ssl/private/private.key"
+        yellow "证书路径: /etc/ssl/private/fullchain.cer"
         
         # 保存域名变量供后续使用
         echo "$domain" > /tmp/domain_name.txt
@@ -122,11 +123,7 @@ RENEW
 function installNginx() {
     yellow "开始安装Nginx..."
     
-    if [ "$release" == "centos" ]; then
-        sudo apt update && sudo apt upgrade -y && apt-get install -y gcc g++ libpcre3 libpcre3-dev zlib1g zlib1g-dev openssl libssl-dev wget sudo make curl socat cron && wget https://nginx.org/download/nginx-1.27.1.tar.gz && tar -xvf nginx-1.27.1.tar.gz && cd nginx-1.27.1 && ./configure --prefix=/usr/local/nginx --sbin-path=/usr/sbin/nginx --conf-path=/etc/nginx/nginx.conf --with-http_stub_status_module --with-http_ssl_module --with-http_realip_module --with-http_sub_module --with-stream --with-stream_ssl_module --with-stream_ssl_preread_module --with-http_v2_module && make && make install && cd
-    else
-        sudo apt update && sudo apt upgrade -y && apt-get install -y gcc g++ libpcre3 libpcre3-dev zlib1g zlib1g-dev openssl libssl-dev wget sudo make curl socat cron && wget https://nginx.org/download/nginx-1.27.1.tar.gz && tar -xvf nginx-1.27.1.tar.gz && cd nginx-1.27.1 && ./configure --prefix=/usr/local/nginx --sbin-path=/usr/sbin/nginx --conf-path=/etc/nginx/nginx.conf --with-http_stub_status_module --with-http_ssl_module --with-http_realip_module --with-http_sub_module --with-stream --with-stream_ssl_module --with-stream_ssl_preread_module --with-http_v2_module && make && make install && cd
-    fi
+    sudo apt update && sudo apt upgrade -y && apt-get install -y gcc g++ libpcre3 libpcre3-dev zlib1g zlib1g-dev openssl libssl-dev wget sudo make curl socat cron && wget https://nginx.org/download/nginx-1.27.1.tar.gz && tar -xvf nginx-1.27.1.tar.gz && cd nginx-1.27.1 && ./configure --prefix=/usr/local/nginx --sbin-path=/usr/sbin/nginx --conf-path=/etc/nginx/nginx.conf --with-http_stub_status_module --with-http_ssl_module --with-http_realip_module --with-http_sub_module --with-stream --with-stream_ssl_module --with-stream_ssl_preread_module --with-http_v2_module && make && make install && cd
     
     if [ $? -ne 0 ]; then
         red "Nginx安装失败，请检查错误信息"
@@ -135,7 +132,7 @@ function installNginx() {
     
     # 创建nginx systemd服务文件
     yellow "创建nginx.service文件..."
-    cat > /etc/systemd/system/nginx.service << EOF
+    cat > /lib/systemd/system/nginx.service << EOF
 [Unit]
 Description=A high performance web server and a reverse proxy server
 Documentation=man:nginx(8)
@@ -158,7 +155,7 @@ EOF
     # 重新加载systemd配置
     systemctl daemon-reload
     
-    systemctl enable nginx
+    systemctl enable nginx.service
     
     green "Nginx安装成功!"
     
@@ -187,16 +184,10 @@ function configureNginx() {
     fi
     
     # 检查证书文件是否存在
-    certDir="/root/cert/$domain"
-    if [ ! -f "$certDir/private.key" ] || [ ! -f "$certDir/fullchain.crt" ]; then
+    if [ ! -f "/etc/ssl/private/private.key" ] || [ ! -f "/etc/ssl/private/fullchain.cer" ]; then
         red "证书文件不存在，请先申请证书"
         exit 1
     fi
-    
-    # 创建证书目录
-    mkdir -p /etc/ssl/private/
-    cp $certDir/private.key /etc/ssl/private/private.key
-    cp $certDir/fullchain.crt /etc/ssl/private/fullchain.cer
     
     # 读取用户输入
     read -p "请输入要反向代理的目标网站(默认为www.lovelive-anime.jp): " targetSite
@@ -275,7 +266,6 @@ http {
         resolver_timeout           2s;
 
         location / {
-            
             sub_filter                            \$proxy_host \$host;
             sub_filter_once                       off;
 
@@ -331,39 +321,59 @@ EOF
     fi
 }
 
+# 安装Xray
+function installXray() {
+    yellow "开始安装Xray..."
+    
+    # 使用官方脚本安装Xray
+    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install -u root
+    
+    if [ $? -ne 0 ]; then
+        red "Xray安装失败，请检查错误信息"
+        exit 1
+    else
+        green "Xray安装成功!"
+    fi
+}
+
 # 主函数
 function main() {
-    yellow "Cloudflare API SSL证书自动申请与Nginx配置脚本"
-    yellow "适用于Reality的dest域名配置"
+    yellow "Reality自动部署脚本 (偷自己证书版)"
+    yellow "适用于已有域名的Reality部署"
     echo "-------------------------------------"
     
     echo "请选择要执行的操作:"
-    echo "1. 申请SSL证书"
-    echo "2. 安装并配置Nginx"
-    echo "3. 全部执行(申请证书+安装配置Nginx)"
-    echo "4. 仅配置Nginx(已有证书)"
-    read -p "请输入选项[1-4]: " choice
+    echo "1. 安装sudo"
+    echo "2. 申请SSL证书"
+    echo "3. 安装并配置Nginx"
+    echo "4. 安装Xray"
+    echo "5. 全部执行(sudo+证书+Nginx+Xray)"
+    read -p "请输入选项[1-5]: " choice
     
     case "$choice" in
         1)
-            installAcme
-            setCFAPI
-            issueSSL
+            installSudo
             ;;
         2)
-            installNginx
-            configureNginx
-            ;;
-        3)
             installAcme
             setCFAPI
             issueSSL
+            ;;
+        3)
             installNginx
             configureNginx
             ;;
         4)
+            installXray
+            ;;
+        5)
+            installSudo
+            installAcme
+            setCFAPI
+            issueSSL
             installNginx
             configureNginx
+            installXray
             ;;
         *)
             red "无效选项，请重新运行脚本"
