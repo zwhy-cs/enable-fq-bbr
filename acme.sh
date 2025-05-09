@@ -308,8 +308,8 @@ function main() {
             installSudo
             installAcme
             setCFAPI
-            issueSSL
             installNginx
+            issueSSL
             configureNginx
             ;;
         *)
