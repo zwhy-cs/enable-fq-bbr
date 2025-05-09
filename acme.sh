@@ -55,10 +55,6 @@ function installAcme() {
     
     # 切换CA机构
     acme.sh --set-default-ca --server letsencrypt
-    if [ $? -ne 0 ]; then
-        red "设置默认CA失败，请检查错误信息"
-        exit 1
-    fi
 }
 
 # 设置Cloudflare API凭证
@@ -91,32 +87,12 @@ function issueSSL() {
     # 使用API模式申请证书
     acme.sh --issue --dns dns_cf -d "$domain"
     
-    if [ $? -ne 0 ]; then
-        red "证书申请失败，请检查域名和API设置是否正确"
-        exit 1
-    else
-        green "证书申请成功!"
-    fi
-    
-    # 创建证书目录
-    mkdir -p /etc/ssl/private/
-    
     # 安装证书到指定目录，不添加重载命令，因为nginx可能尚未安装
     acme.sh --install-cert -d "$domain" --ecc \
         --key-file /etc/ssl/private/private.key  \
-        --fullchain-file /etc/ssl/private/fullchain.cer
+        --fullchain-file /etc/ssl/private/fullchain.cer \
+        --reloadcmd "systemctl force-reload nginx"
     
-    if [ $? -eq 0 ]; then
-        green "证书已安装至 /etc/ssl/private/"
-        yellow "私钥路径: /etc/ssl/private/private.key"
-        yellow "证书路径: /etc/ssl/private/fullchain.cer"
-        
-        # 保存域名变量供后续使用
-        echo "$domain" > /tmp/domain_name.txt
-    else
-        red "证书安装失败，请检查错误信息"
-        exit 1
-    fi
 }
 
 # 安装Nginx
@@ -125,10 +101,6 @@ function installNginx() {
     
     sudo apt update && sudo apt upgrade -y && apt-get install -y gcc g++ libpcre3 libpcre3-dev zlib1g zlib1g-dev openssl libssl-dev wget sudo make curl socat cron && wget https://nginx.org/download/nginx-1.27.1.tar.gz && tar -xvf nginx-1.27.1.tar.gz && cd nginx-1.27.1 && ./configure --prefix=/usr/local/nginx --sbin-path=/usr/sbin/nginx --conf-path=/etc/nginx/nginx.conf --with-http_stub_status_module --with-http_ssl_module --with-http_realip_module --with-http_sub_module --with-stream --with-stream_ssl_module --with-stream_ssl_preread_module --with-http_v2_module && make && make install && cd
     
-    if [ $? -ne 0 ]; then
-        red "Nginx安装失败，请检查错误信息"
-        exit 1
-    fi
     
     # 创建nginx systemd服务文件
     yellow "创建nginx.service文件..."
@@ -153,19 +125,7 @@ WantedBy=multi-user.target
 EOF
 
     # 重新加载systemd配置
-    systemctl daemon-reload
-    
-    systemctl enable nginx.service
-    
-    green "Nginx安装成功!"
-    
-    # 创建Nginx日志目录
-    mkdir -p /usr/local/nginx/logs/
-    
-    # 检查目录是否存在
-    if [ ! -d "/etc/nginx/conf.d" ]; then
-        mkdir -p /etc/nginx/conf.d
-    fi
+    systemctl daemon-reload && systemctl enable nginx.service
 }
 
 # 配置Nginx
@@ -183,11 +143,6 @@ function configureNginx() {
         fi
     fi
     
-    # 检查证书文件是否存在
-    if [ ! -f "/etc/ssl/private/private.key" ] || [ ! -f "/etc/ssl/private/fullchain.cer" ]; then
-        red "证书文件不存在，请先申请证书"
-        exit 1
-    fi
     
     # 读取用户输入
     read -p "请输入要反向代理的目标网站(默认为www.lovelive-anime.jp): " targetSite
@@ -307,7 +262,7 @@ EOF
     fi
     
     # 重启Nginx
-    systemctl restart nginx
+    systemctl daemon-reload && systemctl enable nginx.service
     
     # 检查Nginx是否运行
     systemctl status nginx | grep "active (running)" > /dev/null
@@ -322,19 +277,6 @@ EOF
 }
 
 # 安装Xray
-function installXray() {
-    yellow "开始安装Xray..."
-    
-    # 使用官方脚本安装Xray
-    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install -u root
-    
-    if [ $? -ne 0 ]; then
-        red "Xray安装失败，请检查错误信息"
-        exit 1
-    else
-        green "Xray安装成功!"
-    fi
-}
 
 # 主函数
 function main() {
@@ -346,9 +288,8 @@ function main() {
     echo "1. 安装sudo"
     echo "2. 申请SSL证书"
     echo "3. 安装并配置Nginx"
-    echo "4. 安装Xray"
-    echo "5. 全部执行(sudo+证书+Nginx+Xray)"
-    read -p "请输入选项[1-5]: " choice
+    echo "4. 全部执行(sudo+证书+Nginx)"
+    read -p "请输入选项[1-4]: " choice
     
     case "$choice" in
         1)
@@ -364,16 +305,12 @@ function main() {
             configureNginx
             ;;
         4)
-            installXray
-            ;;
-        5)
             installSudo
             installAcme
             setCFAPI
             issueSSL
             installNginx
             configureNginx
-            installXray
             ;;
         *)
             red "无效选项，请重新运行脚本"
