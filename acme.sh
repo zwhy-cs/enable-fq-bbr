@@ -254,7 +254,7 @@ http {
     }
 
     server {
-        listen                     127.0.0.1:8003 ssl http2 proxy_protocol;
+        listen                     127.0.0.1:8003 ssl proxy_protocol;
 
         set_real_ip_from           127.0.0.1;
         real_ip_header             proxy_protocol;
@@ -275,8 +275,6 @@ http {
         resolver_timeout           2s;
 
         location / {
-            # 注释掉GeoIP相关设置，不再禁止中国大陆IP访问
-            # 如需IP限制功能，请在编译安装Nginx时添加GeoIP模块
             
             sub_filter                            \$proxy_host \$host;
             sub_filter_once                       off;
