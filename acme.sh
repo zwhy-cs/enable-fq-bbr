@@ -202,10 +202,6 @@ function configureNginx() {
     read -p "请输入要反向代理的目标网站(默认为www.lovelive-anime.jp): " targetSite
     targetSite=${targetSite:-www.lovelive-anime.jp}
     
-    # 安装GeoIP依赖
-    yellow "安装GeoIP依赖..."
-    apt-get update && apt-get install -y geoip-database libgeoip-dev
-
     # 创建Nginx配置文件
     cat > /etc/nginx/nginx.conf << EOF
 user root;
@@ -221,9 +217,6 @@ events {
 http {
     log_format main '[\$time_local] \$proxy_protocol_addr "\$http_referer" "\$http_user_agent"';
     access_log /usr/local/nginx/logs/access.log main;
-
-    # 加载GeoIP模块
-    geoip_country /usr/share/GeoIP/GeoIP.dat;
 
     map \$http_upgrade \$connection_upgrade {
         default upgrade;
@@ -282,10 +275,8 @@ http {
         resolver_timeout           2s;
 
         location / {
-            # 禁止中国大陆IP访问
-            if ($geoip_country_code = "CN") {
-                return 403;
-            }
+            # 注释掉GeoIP相关设置，不再禁止中国大陆IP访问
+            # 如需IP限制功能，请在编译安装Nginx时添加GeoIP模块
             
             sub_filter                            \$proxy_host \$host;
             sub_filter_once                       off;
