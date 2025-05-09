@@ -171,7 +171,7 @@ function configureNginx() {
     
     # 创建Nginx配置文件
     cat > /etc/nginx/nginx.conf << EOF
-user nginx;
+user www-data;
 worker_processes auto;
 
 error_log /usr/local/nginx/logs/error.log notice;
