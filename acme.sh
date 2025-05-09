@@ -24,14 +24,6 @@ function blue() {
     echo -e "${BLUE}$1${PLAIN}"
 }
 
-
-
-# 检查依赖
-function checkDependency() {
-    ${systemPackage} -y update
-    ${systemPackage} -y install socat curl wget unzip tar git
-}
-
 # 安装acme.sh
 function installAcme() {
     if [ ! -f ~/.acme.sh/acme.sh ]; then
@@ -117,10 +109,10 @@ function installNginx() {
     yellow "开始安装Nginx..."
     
     if [ "$release" == "centos" ]; then
-        ${systemPackage} install -y nginx
+        apt install -y nginx
     else
-        ${systemPackage} update
-        ${systemPackage} install -y nginx
+        apt update
+        apt install -y nginx
     fi
     
     if [ $? -ne 0 ]; then
@@ -321,7 +313,6 @@ function main() {
     
     case "$choice" in
         1)
-            checkDependency
             installAcme
             setCFAPI
             issueSSL
@@ -331,7 +322,6 @@ function main() {
             configureNginx
             ;;
         3)
-            checkDependency
             installAcme
             setCFAPI
             issueSSL
