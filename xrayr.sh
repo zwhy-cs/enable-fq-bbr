@@ -255,7 +255,7 @@ add_node() {
           Path: # HTTP PATH, Empty for any
           Dest: 80 # Required, Destination of fallback, check https://xtls.github.io/config/features/fallback.html for details.
           ProxyProtocolVer: 0 # Send PROXY protocol version, 0 for disable
-      DisableLocalREALITYConfig: $disable_local_reality  # disable local reality config
+      DisableLocalREALITYConfig: true  # disable local reality config
       EnableREALITY: $enable_reality_flag # Enable REALITY
       REALITYConfigs:
         Show: true # Show REALITY debug
