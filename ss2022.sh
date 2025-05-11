@@ -27,8 +27,6 @@ check_docker() {
 create_config() {
     echo -e "${GREEN}正在创建配置文件...${PLAIN}"
     
-    # 生成随机密码
-    SS_PASSWORD=$(openssl rand -base64 16)
     SHADOW_TLS_PASSWORD=$(openssl rand -base64 16)
     
     # 创建docker-compose.yml
@@ -36,13 +34,6 @@ create_config() {
     cat > /etc/shadowsocks-docker/docker-compose.yml << EOF
 version: '3.0'
 services:
-  shadowsocks:
-    image: ghcr.io/shadowsocks/ssserver-rust:latest
-    container_name: shadowsocks-raw
-    restart: always
-    network_mode: "host"
-    volumes:
-      - /etc/shadowsocks-docker/config.json:/etc/shadowsocks-rust/config.json
   shadow-tls:
     image: ghcr.io/ihciah/shadow-tls:latest
     restart: always
@@ -56,19 +47,6 @@ services:
       - V3=1
 EOF
 
-    # 创建shadowsocks-rust的配置文件
-    cat > /etc/shadowsocks-docker/config.json << EOF
-{
-    "server": "127.0.0.1",
-    "server_port": 45678,
-    "password": "${SS_PASSWORD}",
-    "method": "2022-blake3-aes-128-gcm",
-    "mode": "tcp_and_udp",
-}
-EOF
-
-    echo -e "${GREEN}配置文件创建完成${PLAIN}"
-}
 
 # 启动服务
 start_service() {
@@ -83,17 +61,8 @@ start_service() {
 
 # 显示配置信息
 show_config() {
-    IP=$(curl -s https://api.ipify.org)
-    SS_PASSWORD=$(grep "\"password\":" /etc/shadowsocks-docker/config.json | cut -d'"' -f4)
     SHADOW_TLS_PASSWORD=$(grep "PASSWORD=" /etc/shadowsocks-docker/docker-compose.yml | tail -1 | cut -d'=' -f2- | tr -d ' ')
 
-    echo -e "${GREEN}======================================================${PLAIN}"
-    echo -e "${GREEN}Shadowsocks + Shadow-TLS 安装成功！${PLAIN}"
-    echo -e "${GREEN}======================================================${PLAIN}"
-    echo -e "${YELLOW}服务器地址: ${PLAIN}${IP}"
-    echo -e "${YELLOW}端口: ${PLAIN}8443"
-    echo -e "${YELLOW}加密方式: ${PLAIN}2022-blake3-aes-128-gcm"
-    echo -e "${YELLOW}Shadowsocks 密码: ${PLAIN}${SS_PASSWORD}"
     echo -e "${YELLOW}Shadow-TLS 密码: ${PLAIN}${SHADOW_TLS_PASSWORD}"
     echo -e "${YELLOW}Shadow-TLS 版本: ${PLAIN}v3"
     echo -e "${YELLOW}混淆域名: ${PLAIN}icloud.com:443"
@@ -106,7 +75,7 @@ show_config() {
 
 # 主函数
 main() {
-    echo -e "${GREEN}开始安装 Shadowsocks + Shadow-TLS...${PLAIN}"
+    echo -e "${GREEN}开始安装Shadow-TLS...${PLAIN}"
     check_docker
     create_config
     start_service
