@@ -32,7 +32,7 @@ create_config() {
     # 创建docker-compose.yml
     mkdir -p /etc/shadowsocks-docker
     cat > /etc/shadowsocks-docker/docker-compose.yml << EOF
-version: '3.0'
+version: '3.5'
 services:
   shadow-tls:
     image: ghcr.io/ihciah/shadow-tls:latest
