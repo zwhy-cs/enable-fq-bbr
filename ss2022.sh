@@ -49,7 +49,7 @@ services:
     security_opt:
       - seccomp:unconfined
 EOF
-
+}
 
 # 启动服务
 start_service() {
