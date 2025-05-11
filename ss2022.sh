@@ -45,6 +45,9 @@ services:
       - TLS=icloud.com:443
       - PASSWORD=${SHADOW_TLS_PASSWORD}
       - V3=1
+      - RUST_LOG=error
+    security_opt:
+      - seccomp:unconfined
 EOF
 
 
