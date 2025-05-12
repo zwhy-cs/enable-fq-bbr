@@ -27,8 +27,6 @@ check_docker() {
 create_config() {
     echo -e "${GREEN}正在创建配置文件...${PLAIN}"
     
-    SHADOW_TLS_PASSWORD=$(openssl rand -base64 16)
-    
     # 创建docker-compose.yml
     mkdir -p /etc/shadowsocks-docker
     cat > /etc/shadowsocks-docker/docker-compose.yml << EOF
@@ -43,7 +41,7 @@ services:
       - LISTEN=0.0.0.0:8443
       - SERVER=127.0.0.1:45678
       - TLS=icloud.com:443
-      - PASSWORD=${SHADOW_TLS_PASSWORD}
+      - PASSWORD=ixejvmdGp0fuIBkg4M2Diw==
       - V3=1
       - RUST_LOG=error
     security_opt:
