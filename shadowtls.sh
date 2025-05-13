@@ -42,6 +42,7 @@ services:
       - SERVER=127.0.0.1:45678
       - TLS=icloud.com:443
       - PASSWORD=ixejvmdGp0fuIBkg4M2Diw==
+      - V3=1
       - RUST_LOG=info
     security_opt:
       - seccomp:unconfined
