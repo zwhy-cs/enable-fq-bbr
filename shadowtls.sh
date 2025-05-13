@@ -28,8 +28,8 @@ create_config() {
     echo -e "${GREEN}正在创建配置文件...${PLAIN}"
     
     # 创建docker-compose.yml
-    mkdir -p /etc/shadowsocks-docker
-    cat > /etc/shadowsocks-docker/docker-compose.yml << EOF
+    mkdir -p /etc/shadowtls
+    cat > /etc/shadowtls/docker-compose.yml << EOF
 version: '3.5'
 services:
   shadow-tls:
@@ -52,7 +52,7 @@ EOF
 # 启动服务
 start_service() {
     echo -e "${GREEN}正在启动服务...${PLAIN}"
-    cd /etc/shadowsocks-docker && docker compose up -d
+    cd /etc/shadowtls && docker compose up -d
     if [ $? -ne 0 ]; then
         echo -e "${RED}服务启动失败，请检查配置和网络${PLAIN}"
         exit 1
@@ -62,15 +62,13 @@ start_service() {
 
 # 显示配置信息
 show_config() {
-    SHADOW_TLS_PASSWORD=$(grep "PASSWORD=" /etc/shadowsocks-docker/docker-compose.yml | tail -1 | cut -d'=' -f2- | tr -d ' ')
+    SHADOW_TLS_PASSWORD=$(grep "PASSWORD=" /etc/shadowtls/docker-compose.yml | tail -1 | cut -d'=' -f2- | tr -d ' ')
 
     echo -e "${YELLOW}Shadow-TLS 密码: ${PLAIN}${SHADOW_TLS_PASSWORD}"
     echo -e "${YELLOW}Shadow-TLS 版本: ${PLAIN}v3"
     echo -e "${YELLOW}混淆域名: ${PLAIN}icloud.com:443"
     echo -e "${GREEN}======================================================${PLAIN}"
-    echo -e "${GREEN}配置文件路径: /etc/shadowsocks-docker/config.json${PLAIN}"
-    echo -e "${GREEN}重启命令: cd /etc/shadowsocks-docker && docker compose restart${PLAIN}"
-    echo -e "${GREEN}停止命令: cd /etc/shadowsocks-docker && docker compose down${PLAIN}"
+    echo -e "${GREEN}配置文件路径: /etc/shadowtls/docker-compose.yml${PLAIN}"
     echo -e "${GREEN}======================================================${PLAIN}"
 }
 
