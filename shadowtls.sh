@@ -43,7 +43,7 @@ services:
       - TLS=icloud.com:443
       - PASSWORD=ixejvmdGp0fuIBkg4M2Diw==
       - V3=1
-      - RUST_LOG=info
+      - RUST_LOG=error
     security_opt:
       - seccomp:unconfined
 EOF
