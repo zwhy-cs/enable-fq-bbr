@@ -29,7 +29,7 @@ create_config() {
     
     # 创建docker-compose.yml
     mkdir -p /etc/shadowtls
-    cat > /etc/shadowtls/docker-compose.yml << EOF
+    cat > /etc/shadowtls/compose.yml << EOF
 version: '3.5'
 services:
   shadow-tls:
@@ -62,13 +62,13 @@ start_service() {
 
 # 显示配置信息
 show_config() {
-    SHADOW_TLS_PASSWORD=$(grep "PASSWORD=" /etc/shadowtls/docker-compose.yml | tail -1 | cut -d'=' -f2- | tr -d ' ')
+    SHADOW_TLS_PASSWORD=$(grep "PASSWORD=" /etc/shadowtls/compose.yml | tail -1 | cut -d'=' -f2- | tr -d ' ')
 
     echo -e "${YELLOW}Shadow-TLS 密码: ${PLAIN}${SHADOW_TLS_PASSWORD}"
     echo -e "${YELLOW}Shadow-TLS 版本: ${PLAIN}v3"
     echo -e "${YELLOW}混淆域名: ${PLAIN}icloud.com:443"
     echo -e "${GREEN}======================================================${PLAIN}"
-    echo -e "${GREEN}配置文件路径: /etc/shadowtls/docker-compose.yml${PLAIN}"
+    echo -e "${GREEN}配置文件路径: /etc/shadowtls/compose.yml${PLAIN}"
     echo -e "${GREEN}======================================================${PLAIN}"
 }
 
