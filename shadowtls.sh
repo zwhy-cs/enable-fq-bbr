@@ -52,6 +52,7 @@ services:
       - TLS=${TLS_SERVER}
       - PASSWORD=ixejvmdGp0fuIBkg4M2Diw==
       - V3=1
+      - strict=1
       - RUST_LOG=error
     security_opt:
       - seccomp:unconfined
