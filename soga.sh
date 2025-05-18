@@ -102,6 +102,7 @@ edit_soga() {
   echo "编辑文件：$COMPOSE_FILE"
   ${EDITOR:-nano} "$COMPOSE_FILE"
   echo "配置已保存。"
+  docker compose -f "$COMPOSE_FILE" up -d
   read -p "按回车键返回菜单..." _
 }
 
