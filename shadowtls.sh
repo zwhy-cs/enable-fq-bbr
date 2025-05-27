@@ -47,7 +47,7 @@ services:
     network_mode: "host"
     environment:
       - MODE=server
-      - LISTEN=0.0.0.0:8443
+      - LISTEN=0.0.0.0:443
       - SERVER=127.0.0.1:45678
       - TLS=${TLS_SERVER}
       - PASSWORD=ixejvmdGp0fuIBkg4M2Diw==
