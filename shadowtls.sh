@@ -23,6 +23,15 @@ check_docker() {
   fi
 }
 
+# 配置系统内存锁定限制
+configure_memlock() {
+
+  cat >> /etc/security/limits.conf << EOF
+*    hard    memlock        unlimited
+*    soft    memlock        unlimited
+EOF
+}
+
 # 获取用户输入
 get_user_input() {
     read -p "请输入TLS域名和端口(例如: icloud.com:443): " TLS_SERVER
@@ -86,6 +95,7 @@ show_config() {
 main() {
     echo -e "${GREEN}开始安装Shadow-TLS...${PLAIN}"
     check_docker
+    configure_memlock
     get_user_input
     create_config
     start_service
