@@ -71,7 +71,7 @@ EOF
 [
   {
     "tag": "dokodemo-in",
-    "port": 8443,
+    "port": 443,
     "protocol": "dokodemo-door",
     "settings": {
         "address": "127.0.0.1",
