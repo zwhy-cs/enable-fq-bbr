@@ -43,67 +43,6 @@ install_xrayr() {
 }
 EOF
 
-    # 覆盖 route.json
-    cat > /etc/XrayR/route.json <<EOF
-{
-    "rules": [
-      {
-        "inboundTag": [
-          "dokodemo-in"
-        ],
-        "domain": [
-          "speed.cloudflare.com"
-        ],
-        "outboundTag": "direct"
-      },
-      {
-        "inboundTag": [
-          "dokodemo-in"
-        ],
-        "outboundTag": "block"
-      }
-    ]
-}
-EOF
-
-    # 覆盖 custom_inbound.json
-    cat > /etc/XrayR/custom_inbound.json <<EOF
-[
-  {
-    "tag": "dokodemo-in",
-    "port": 443,
-    "protocol": "dokodemo-door",
-    "settings": {
-        "address": "127.0.0.1",
-        "port": 4431,  
-        "network": "tcp"
-    },
-    "sniffing": {
-        "enabled": true,
-        "destOverride": [
-            "tls"
-        ],
-        "routeOnly": true
-    }
-  }
-]
-EOF
-
-    # 覆盖 custom_outbound.json
-    cat > /etc/XrayR/custom_outbound.json <<EOF
-[
-  {
-    "protocol": "freedom",
-    "tag": "direct"
-  },
-  {
-    "protocol": "blackhole",
-    "tag": "block"
-  }
-]
-EOF
-}
-
 # 重启 XrayR
 restart_xrayr() {
     echo "正在重启 XrayR..."
