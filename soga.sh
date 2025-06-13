@@ -37,7 +37,7 @@ enable_show_menu() {
   echo "4) 添加节点"
   echo "5) 删除节点"
   echo "6) 检查服务状态"
-  echo "7) 更新 Soga"
+  echo "7) 更新/修改 Soga 版本"
   echo "0) 退出"
   echo "========================================="
 }
@@ -60,6 +60,8 @@ install_soga() {
   read -p "请输入 server_type (如 ss/v2ray/trojan 等): " server_type
   read -p "请输入 webapi_url (含 https://、以 / 结尾): " webapi_url
   read -p "请输入 webapi_key: " webapi_key
+  read -p "请输入 Soga 版本 (默认为 latest): " soga_version
+  soga_version=${soga_version:-latest}
   echo "node_id 将留空，请使用"添加节点"功能添加。"
 
   mkdir -p "$SOGA_DIR/$server_type"
@@ -69,7 +71,7 @@ version: "3.3"
 
 services:
   soga:
-    image: vaxilu/soga:latest
+    image: vaxilu/soga:${soga_version}
     container_name: soga-$server_type
     restart: always
     network_mode: host
@@ -236,14 +238,23 @@ check_services() {
 update_soga() {
   echo " >>> 更新 Soga..."
   if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
-  
-  echo "正在更新 Soga 镜像..."
+
+  current_image=$(grep -oP 'image: \K[^ ]*' "$COMPOSE_FILE")
+  echo "当前镜像: $current_image"
+  read -p "请输入新的 Soga 版本 (留空以拉取当前版本最新镜像, 输入 'latest' 使用最新版): " new_version
+
+  if [ -n "$new_version" ]; then
+    sed -i "s|image: .*|image: vaxilu/soga:$new_version|" "$COMPOSE_FILE"
+    echo "镜像已更新为 vaxilu/soga:$new_version"
+  fi
+
+  echo "正在拉取 Soga 镜像..."
   docker compose -f "$COMPOSE_FILE" pull
   
   echo "正在重启服务..."
   docker compose -f "$COMPOSE_FILE" up -d
   
-  echo "Soga 已更新至最新版本。"
+  echo "Soga 更新操作完成。"
   read -p "按回车键返回菜单..." _
 }
 
