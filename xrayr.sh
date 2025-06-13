@@ -40,7 +40,7 @@ install_xrayr() {
     fi
 
     # 从指定 URL 下载 XrayR
-    echo -e "${green}正在从 https://github.com/zwhy-cs/XrayR/releases/download/v1.0.1/XrayR-linux-64.zip 下载 XrayR...${plain}"
+    echo -e "${green}正在从 https://github.com/zwhy-cs/XrayR/releases/download/v1.0.2/XrayR-linux-64.zip 下载 XrayR...${plain}"
     curl -L -o /etc/XrayR/XrayR-linux-64.zip "https://github.com/zwhy-cs/XrayR/releases/download/v1.0.0/XrayR-linux-64.zip"
 
     # 解压并清理
