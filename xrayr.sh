@@ -42,10 +42,6 @@ install_xrayr() {
     # 从指定 URL 下载 XrayR
     echo -e "${green}正在从 https://github.com/zwhy-cs/XrayR/releases/download/v1.0.0/XrayR-linux-64.zip 下载 XrayR...${plain}"
     curl -L -o /etc/XrayR/XrayR-linux-64.zip "https://github.com/zwhy-cs/XrayR/releases/download/v1.0.0/XrayR-linux-64.zip"
-    if [[ $? -ne 0 ]]; then
-        echo -e "${red}下载 XrayR 失败，请确保服务器能够访问 Github。${plain}"
-        exit 1
-    fi
 
     # 解压并清理
     echo "正在解压 XrayR..."
@@ -77,16 +73,13 @@ EOF
     systemctl enable XrayR
     systemctl start XrayR
     
-    # 初始化配置文件（如果不存在）
-    if [ ! -f "$CONFIG_FILE" ]; then
-        echo "正在初始化 config.yml 文件..."
-        echo -e "Log:\n  Level: error # Log level: none, error, warning, info, debug\n  AccessPath: # /etc/XrayR/access.Log\n  ErrorPath:  /etc/XrayR/error.log\nDnsConfigPath:  /etc/XrayR/dns.json # Path to dns config, check https://xtls.github.io/config/dns.html for help\nRouteConfigPath: /etc/XrayR/route.json # Path to route config, check https://xtls.github.io/config/routing.html for help\nInboundConfigPath: #/etc/XrayR/custom_inbound.json # Path to custom inbound config, check https://xtls.github.io/config/inbound.html for help\nOutboundConfigPath: /etc/XrayR/custom_outbound.json # Path to custom outbound config, check https://xtls.github.io/config/outbound.html for help\nConnectionConfig:\n  Handshake: 4 # Handshake time limit, Second\n  ConnIdle: 600 # Connection idle time limit, Second\n  UplinkOnly: 2 # Time limit when the connection downstream is closed, Second\n  DownlinkOnly: 4 # Time limit when the connection is closed after the uplink is closed, Second\n  BufferSize: 64 # The internal cache size of each connection, kB\nNodes:" > $CONFIG_FILE
-    fi
+    # 初始化配置文件
+    echo "正在初始化 config.yml 文件..."
+    echo -e "Log:\n  Level: error # Log level: none, error, warning, info, debug\n  AccessPath: # /etc/XrayR/access.Log\n  ErrorPath:  /etc/XrayR/error.log\nDnsConfigPath:  /etc/XrayR/dns.json # Path to dns config, check https://xtls.github.io/config/dns.html for help\nRouteConfigPath: /etc/XrayR/route.json # Path to route config, check https://xtls.github.io/config/routing.html for help\nInboundConfigPath: #/etc/XrayR/custom_inbound.json # Path to custom inbound config, check https://xtls.github.io/config/inbound.html for help\nOutboundConfigPath: /etc/XrayR/custom_outbound.json # Path to custom outbound config, check https://xtls.github.io/config/outbound.html for help\nConnectionConfig:\n  Handshake: 4 # Handshake time limit, Second\n  ConnIdle: 600 # Connection idle time limit, Second\n  UplinkOnly: 2 # Time limit when the connection downstream is closed, Second\n  DownlinkOnly: 4 # Time limit when the connection is closed after the uplink is closed, Second\n  BufferSize: 64 # The internal cache size of each connection, kB\nNodes:" > $CONFIG_FILE
+    echo "XrayR 安装并初始化配置文件完成。"
 
-    if [ ! -f "/etc/XrayR/dns.json" ]; then
-        echo "正在创建 dns.json..."
-        # 覆盖 dns.json
-        cat > /etc/XrayR/dns.json <<EOF
+    # 覆盖 dns.json
+    cat > /etc/XrayR/dns.json <<EOF
 {
   "dns": {
     "servers": [
@@ -96,12 +89,9 @@ EOF
   }
 }
 EOF
-    fi
 
-    if [ ! -f "/etc/XrayR/custom_outbound.json" ]; then
-        echo "正在创建 custom_outbound.json..."
-        # 创建 custom_outbound.json
-        cat > /etc/XrayR/custom_outbound.json <<EOF
+    # 创建 custom_outbound.json
+    cat > /etc/XrayR/custom_outbound.json <<EOF
 [
   {
     "protocol": "freedom",
@@ -113,18 +103,13 @@ EOF
   }
 ]
 EOF
-    fi
 
-    if [ ! -f "/etc/XrayR/route.json" ]; then
-        echo "正在创建 route.json..."
-        # 创建 route.json
-        cat > /etc/XrayR/route.json <<EOF
+    # 创建 route.json
+    cat > /etc/XrayR/route.json <<EOF
 {
     "rules": []
 }
 EOF
-    fi
-    echo -e "${green}XrayR 安装完成!${plain}"
 }
 
 # 重启 XrayR
