@@ -40,7 +40,7 @@ install_xrayr() {
     fi
 
     # 从指定 URL 下载 XrayR
-    echo -e "${green}正在从 https://github.com/zwhy-cs/XrayR/releases/download/v1.0.2/XrayR-linux-64.zip 下载 XrayR...${plain}"
+    echo -e "${green}正在从 https://github.com/zwhy-cs/XrayR/releases/download/v1.0.1/XrayR-linux-64.zip 下载 XrayR...${plain}"
     curl -L -o /etc/XrayR/XrayR-linux-64.zip "https://github.com/zwhy-cs/XrayR/releases/download/v1.0.0/XrayR-linux-64.zip"
 
     # 解压并清理
@@ -75,7 +75,23 @@ EOF
     
     # 初始化配置文件
     echo "正在初始化 config.yml 文件..."
-    echo -e "Log:\n  Level: error # Log level: none, error, warning, info, debug\n  AccessPath: # /etc/XrayR/access.Log\n  ErrorPath:  /etc/XrayR/error.log\nDnsConfigPath:  /etc/XrayR/dns.json # Path to dns config, check https://xtls.github.io/config/dns.html for help\nRouteConfigPath: /etc/XrayR/route.json # Path to route config, check https://xtls.github.io/config/routing.html for help\nInboundConfigPath: #/etc/XrayR/custom_inbound.json # Path to custom inbound config, check https://xtls.github.io/config/inbound.html for help\nOutboundConfigPath: /etc/XrayR/custom_outbound.json # Path to custom outbound config, check https://xtls.github.io/config/outbound.html for help\nConnectionConfig:\n  Handshake: 4 # Handshake time limit, Second\n  ConnIdle: 600 # Connection idle time limit, Second\n  UplinkOnly: 2 # Time limit when the connection downstream is closed, Second\n  DownlinkOnly: 4 # Time limit when the connection is closed after the uplink is closed, Second\n  BufferSize: 64 # The internal cache size of each connection, kB\nNodes:" > $CONFIG_FILE
+    cat > $CONFIG_FILE <<EOF
+Log:
+  Level: error # Log level: none, error, warning, info, debug
+  AccessPath: # /etc/XrayR/access.Log
+  ErrorPath:  /etc/XrayR/error.log
+DnsConfigPath:  /etc/XrayR/dns.json # Path to dns config, check https://xtls.github.io/config/dns.html for help
+RouteConfigPath: /etc/XrayR/route.json # Path to route config, check https://xtls.github.io/config/routing.html for help
+InboundConfigPath: #/etc/XrayR/custom_inbound.json # Path to custom inbound config, check https://xtls.github.io/config/inbound.html for help
+OutboundConfigPath: #/etc/XrayR/custom_outbound.json # Path to custom outbound config, check https://xtls.github.io/config/outbound.html for help
+ConnectionConfig:
+  Handshake: 4 # Handshake time limit, Second
+  ConnIdle: 600 # Connection idle time limit, Second
+  UplinkOnly: 2 # Time limit when the connection downstream is closed, Second
+  DownlinkOnly: 4 # Time limit when the connection is closed after the uplink is closed, Second
+  BufferSize: 64 # The internal cache size of each connection, kB
+Nodes:
+EOF
     echo "XrayR 安装并初始化配置文件完成。"
 
     # 覆盖 dns.json
@@ -91,18 +107,18 @@ EOF
 EOF
 
     # 创建 custom_outbound.json
-    cat > /etc/XrayR/custom_outbound.json <<EOF
-[
-  {
-    "protocol": "freedom",
-    "tag": "direct"
-  },
-  {
-    "protocol": "blackhole",
-    "tag": "block"
-  }
-]
-EOF
+#    cat > /etc/XrayR/custom_outbound.json <<EOF
+#[
+#  {
+#    "protocol": "freedom",
+#    "tag": "direct"
+#  },
+#  {
+#    "protocol": "blackhole",
+#    "tag": "block"
+#  }
+#]
+#EOF
 
     # 创建 route.json
     cat > /etc/XrayR/route.json <<EOF
@@ -311,32 +327,6 @@ EOF
             echo "无法自动安装jq，请手动安装后重试。"
         fi
     fi
-
-    if command -v jq &> /dev/null; then
-        local route_file="/etc/XrayR/route.json"
-        if [ -f "$route_file" ]; then
-            inbound_tag="${node_type}_0.0.0.0_${node_port}"
-            outbound_tag="direct"
-
-            temp_route_file=$(mktemp)
-            # 使用 jq 添加新规则
-            jq ".rules += [{\"inboundTag\": [\"${inbound_tag}\"], \"outboundTag\": \"${outbound_tag}\", \"type\": \"field\"}]" "$route_file" > "$temp_route_file"
-
-            if [ $? -eq 0 ] && [ -s "$temp_route_file" ]; then
-                mv "$temp_route_file" "$route_file"
-                echo "路由规则已成功添加到 $route_file"
-            else
-                echo "错误：更新 $route_file 失败。临时文件为空或jq命令出错。"
-                rm -f "$temp_route_file"
-            fi
-        else
-            echo "警告: 路由文件 $route_file 不存在，跳过添加路由规则。"
-        fi
-    else
-        echo "警告: 未找到 jq 命令，跳过自动添加路由规则。请手动将以下规则添加到 $route_file 的 'rules' 数组中:"
-        echo "{\"inboundTag\": [\"${node_type}_0.0.0.0_${node_port}\"], \"outboundTag\": \"direct\", \"type\": \"field\"}"
-    fi
-
     # 重启 XrayR 使配置生效
     restart_xrayr
 }
