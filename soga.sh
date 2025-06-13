@@ -38,6 +38,7 @@ enable_show_menu() {
   echo "5) 删除节点"
   echo "6) 检查服务状态"
   echo "7) 更新/修改 Soga 版本"
+  echo "8) 一键删除全部"
   echo "0) 退出"
   echo "========================================="
 }
@@ -258,10 +259,40 @@ update_soga() {
   read -p "按回车键返回菜单..." _
 }
 
+# 一键删除全部
+delete_all_soga() {
+  read -p "!!! 警告：此操作将删除所有Soga配置和容器，且无法恢复。是否继续？(y/N): " confirm
+  if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+    echo "操作已取消。"
+    read -p "按回车键返回菜单..." _
+    return
+  fi
+
+  echo ">>> 正在停止并删除所有 Soga 服务..."
+  
+  if [ ! -d "$SOGA_DIR" ]; then
+    echo "Soga 配置目录 ($SOGA_DIR) 不存在，无需操作。"
+    read -p "按回车键返回菜单..." _
+    return
+  fi
+
+  # 查找所有 docker-compose 文件并停止服务
+  find "$SOGA_DIR" -name "docker-compose-*.yml" -print0 | while IFS= read -r -d $'\0' compose_file; do
+    echo "正在处理 $compose_file..."
+    docker compose -f "$compose_file" down --rmi all -v --remove-orphans || echo "处理 $compose_file 时出错，但将继续。"
+  done
+
+  echo ">>> 正在删除 Soga 配置目录..."
+  rm -rf "$SOGA_DIR"
+  
+  echo "所有 Soga 服务和配置已成功删除。"
+  read -p "按回车键返回菜单..." _
+}
+
 # 主循环
 while true; do
   enable_show_menu
-  read -p "请输入选项 [0-7]: " choice
+  read -p "请输入选项 [0-8]: " choice
   case "$choice" in
     1) install_soga  ;; 
     2) edit_soga     ;; 
@@ -270,6 +301,7 @@ while true; do
     5) delete_node   ;; 
     6) check_services;; 
     7) update_soga   ;;
+    8) delete_all_soga ;;
     0) echo "退出脚本。"; exit 0 ;; 
     *) echo "无效选项，请重新输入。"; read -p "按回车键继续..." _;;
   esac
