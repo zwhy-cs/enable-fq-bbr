@@ -439,9 +439,9 @@ main_menu() {
         echo " 5. API 用户管理"
         echo " 6. 安装/重置 V2bX"
         echo " 7. 卸载 V2bX"
-        echo " 8. 退出"
+        echo " 0. 退出"
         echo "---------------------------------"
-        read -p "请输入您的选择 [1-8]: " choice
+        read -p "请输入您的选择 [0-7]: " choice
         
         case $choice in
             1) add_node ;;
@@ -451,7 +451,7 @@ main_menu() {
             5) api_user_menu ;;
             6) install_v2bx ;;
             7) uninstall_v2bx ;;
-            8) print_message "green" "正在退出..."; exit 0 ;;
+            0) print_message "green" "正在退出..."; exit 0 ;;
             *) print_message "red" "无效的选择，请重试。" ;;
         esac
         read -n 1 -s -r -p "按任意键继续..."
