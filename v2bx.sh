@@ -52,9 +52,12 @@ uninstall_v2bx() {
     
     print_message "yellow" "正在删除V2bX二进制文件..."
     rm -f /usr/local/bin/v2bx 2>/dev/null || true
+    rm -f /usr/bin/V2bX 2>/dev/null || true
     
     print_message "yellow" "正在删除V2bX服务文件..."
     rm -f /etc/systemd/system/v2bx.service 2>/dev/null || true
+    rm -f /etc/systemd/system/V2bX.service 2>/dev/null || true
+    rm -f /etc/systemd/system/multi-user.target.wants/V2bX.service 2>/dev/null || true
     systemctl daemon-reload 2>/dev/null || true
     
     print_message "yellow" "正在删除V2bX日志文件..."
