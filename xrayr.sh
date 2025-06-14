@@ -292,8 +292,8 @@ Log:
   ErrorPath:  /etc/XrayR/error.log
 DnsConfigPath:  /etc/XrayR/dns.json # Path to dns config, check https://xtls.github.io/config/dns.html for help
 RouteConfigPath: /etc/XrayR/route.json # Path to route config, check https://xtls.github.io/config/routing.html for help
-InboundConfigPath: #/etc/XrayR/custom_inbound.json # Path to custom inbound config, check https://xtls.github.io/config/inbound.html for help
-OutboundConfigPath: #/etc/XrayR/custom_outbound.json # Path to custom outbound config, check https://xtls.github.io/config/outbound.html for help
+InboundConfigPath: /etc/XrayR/custom_inbound.json # Path to custom inbound config, check https://xtls.github.io/config/inbound.html for help
+OutboundConfigPath: /etc/XrayR/custom_outbound.json # Path to custom outbound config, check https://xtls.github.io/config/outbound.html for help
 ConnectionConfig:
   Handshake: 4 # Handshake time limit, Second
   ConnIdle: 600 # Connection idle time limit, Second
@@ -316,19 +316,16 @@ EOF
 }
 EOF
 
-    # 创建 custom_outbound.json
-#    cat > /etc/XrayR/custom_outbound.json <<EOF
-#[
-#  {
-#    "protocol": "freedom",
-#    "tag": "direct"
-#  },
-#  {
-#    "protocol": "blackhole",
-#    "tag": "block"
-#  }
-#]
-#EOF
+    创建 custom_outbound.json
+   cat > /etc/XrayR/custom_outbound.json <<EOF
+[
+]
+EOF
+
+   cat > /etc/XrayR/custom_inbound.json <<EOF
+[
+]
+EOF
 
     # 创建 route.json
     cat > /etc/XrayR/route.json <<EOF
