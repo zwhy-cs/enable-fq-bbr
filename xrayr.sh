@@ -224,6 +224,7 @@ show_log() {
 before_show_menu() {
     echo && echo -n -e "${yellow}按回车返回主菜单: ${plain}" && read temp
     show_menu
+    main
 }
 
 # 安装 XrayR
