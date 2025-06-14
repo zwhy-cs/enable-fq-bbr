@@ -172,12 +172,6 @@ add_node() {
             ;;
     esac
 
-    read -p "请输入节点监听的端口 (用于路由规则): " node_port
-    if [[ ! "$node_port" =~ ^[0-9]+$ ]]; then
-        echo "错误：端口必须为数字。"
-        return 1
-    fi
-
     # 新增：ApiHost 和 ApiKey 只需首次输入并保存
     API_CONF="/etc/XrayR/api.conf"
     if [ -f "$API_CONF" ]; then
@@ -222,7 +216,7 @@ add_node() {
         enable_reality_flag=true # 使用不同的变量名以区分输入的 "y/n"
     else
         enable_vless=false
-        disable_local_reality=false
+        disable_local_reality=true
         enable_reality_flag=false
     fi
 
