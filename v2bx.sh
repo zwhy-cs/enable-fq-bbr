@@ -210,20 +210,32 @@ add_node() {
     
     # 列出可用的API用户
     print_message "yellow" "\n--- 可用的API用户 ---"
-    api_users=$(jq -r '.users[] | .username' "$API_USERS_FILE" 2>/dev/null)
-    if [ -z "$api_users" ]; then
+    api_users_array=($(jq -r '.users[] | .username' "$API_USERS_FILE" 2>/dev/null))
+    if [ ${#api_users_array[@]} -eq 0 ]; then
         print_message "red" "错误: 没有找到API用户。请先在API用户管理中添加用户。"
         return
     fi
     
-    echo "$api_users" | nl -w2 -s'. '
+    # 显示编号的用户列表
+    for i in "${!api_users_array[@]}"; do
+        echo "$((i+1)). ${api_users_array[i]}"
+    done
     echo ""
     
-    read -p "选择API用户 (输入用户名): " selected_username
-    if [ -z "$selected_username" ]; then
-        print_message "red" "错误: 用户名不能为空。"
+    read -p "选择API用户 (输入序号): " user_index
+    if [ -z "$user_index" ]; then
+        print_message "red" "错误: 序号不能为空。"
         return
     fi
+    
+    # 验证序号范围
+    if ! [[ "$user_index" =~ ^[0-9]+$ ]] || [ "$user_index" -lt 1 ] || [ "$user_index" -gt ${#api_users_array[@]} ]; then
+        print_message "red" "错误: 无效的序号。请输入1到${#api_users_array[@]}之间的数字。"
+        return
+    fi
+    
+    # 获取选定的用户名（数组索引从0开始，所以减1）
+    selected_username="${api_users_array[$((user_index-1))]}"
     
     # 获取选定用户的API信息
     user_info=$(jq --arg name "$selected_username" '.users[] | select(.username == $name)' "$API_USERS_FILE")
