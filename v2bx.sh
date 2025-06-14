@@ -33,6 +33,39 @@ ensure_api_users_file_exists() {
     fi
 }
 
+uninstall_v2bx() {
+    print_message "yellow" "--- 卸载 V2bX ---"
+    print_message "red" "警告: 此操作将完全卸载V2bX并删除所有配置文件！"
+    read -p "您确定要继续吗？ (y/N): " confirm
+    
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        print_message "yellow" "取消卸载操作。"
+        return
+    fi
+    
+    print_message "yellow" "正在停止V2bX服务..."
+    systemctl stop v2bx 2>/dev/null || true
+    systemctl disable v2bx 2>/dev/null || true
+    
+    print_message "yellow" "正在删除V2bX配置文件..."
+    rm -rf /etc/V2bX/ 2>/dev/null || true
+    
+    print_message "yellow" "正在删除V2bX二进制文件..."
+    rm -f /usr/local/bin/v2bx 2>/dev/null || true
+    
+    print_message "yellow" "正在删除V2bX服务文件..."
+    rm -f /etc/systemd/system/v2bx.service 2>/dev/null || true
+    systemctl daemon-reload 2>/dev/null || true
+    
+    print_message "yellow" "正在删除V2bX日志文件..."
+    rm -rf /var/log/v2bx/ 2>/dev/null || true
+    
+    print_message "yellow" "正在删除V2bX临时文件..."
+    rm -rf /tmp/v2bx* 2>/dev/null || true
+    
+    print_message "green" "V2bX 卸载完成！"
+    print_message "yellow" "注意: 如果您之前安装了Xray Core，它可能仍然存在。"
+}
 
 install_v2bx() {
     if ! command_exists v2bx; then
@@ -124,6 +157,13 @@ list_nodes() {
     check_config_file
     print_message "yellow" "\n--- 当前节点 ---"
     jq -r '.Nodes[] | "ID: \(.NodeID) | 名称: \(.Name) | 类型: \(.NodeType) | ApiHost: \(.ApiHost) | ApiKey: \(.ApiKey)"' "$CONFIG_FILE"
+    echo ""
+}
+
+view_config() {
+    check_config_file
+    print_message "yellow" "\n--- 当前配置文件内容 ---"
+    cat "$CONFIG_FILE" | jq .
     echo ""
 }
 
@@ -380,19 +420,23 @@ main_menu() {
         echo " 1. 添加节点"
         echo " 2. 删除节点"
         echo " 3. 列出所有节点"
-        echo " 4. API 用户管理"
-        echo " 5. 安装/重置 V2bX"
-        echo " 6. 退出"
+        echo " 4. 查看当前配置"
+        echo " 5. API 用户管理"
+        echo " 6. 安装/重置 V2bX"
+        echo " 7. 卸载 V2bX"
+        echo " 8. 退出"
         echo "---------------------------------"
-        read -p "请输入您的选择 [1-6]: " choice
+        read -p "请输入您的选择 [1-8]: " choice
         
         case $choice in
             1) add_node ;;
             2) delete_node ;;
             3) list_nodes ;;
-            4) api_user_menu ;;
-            5) install_v2bx ;;
-            6) print_message "green" "正在退出..."; exit 0 ;;
+            4) view_config ;;
+            5) api_user_menu ;;
+            6) install_v2bx ;;
+            7) uninstall_v2bx ;;
+            8) print_message "green" "正在退出..."; exit 0 ;;
             *) print_message "red" "无效的选择，请重试。" ;;
         esac
         read -n 1 -s -r -p "按任意键继续..."
