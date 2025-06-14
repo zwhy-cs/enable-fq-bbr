@@ -123,7 +123,7 @@ check_config_file() {
 list_nodes() {
     check_config_file
     print_message "yellow" "\n--- 当前节点 ---"
-    jq -r '.Nodes[] | "ID: \(.NodeID | tostring | lpad(2)) | 名称: \(.Name) | 类型: \(.NodeType) | ApiHost: \(.ApiHost) | ApiKey: \(.ApiKey)"' "$CONFIG_FILE"
+    jq -r '.Nodes[] | "ID: \(.NodeID) | 名称: \(.Name) | 类型: \(.NodeType) | ApiHost: \(.ApiHost) | ApiKey: \(.ApiKey)"' "$CONFIG_FILE"
     echo ""
 }
 
