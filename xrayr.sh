@@ -7,6 +7,7 @@ yellow='\033[0;33m'
 plain='\033[0m'
 
 version="v1.0.0"
+API_CRED_DIR="/etc/XrayR/api_credentials"
 
 # check root
 [[ $EUID -ne 0 ]] && echo -e "${red}错误: ${plain} 必须使用root用户运行此脚本！\n" && exit 1
@@ -161,6 +162,7 @@ ${green}13.${plain} 设置 XrayR 开机自启
 ${green}14.${plain} 取消 XrayR 开机自启
 ————————————————
 ${green}15.${plain} 更新本脚本
+${green}16.${plain} 管理API凭证
 ${green}0.${plain} 退出
 "
     read -p "请选择操作： " choice
@@ -374,14 +376,24 @@ add_node() {
             ;;
     esac
 
-    # 新增：ApiHost 和 ApiKey 只需首次输入并保存
-    API_CONF="/etc/XrayR/api.conf"
-    if [ -f "$API_CONF" ]; then
-        source "$API_CONF"
+    # 新增：按用户名管理ApiHost 和 ApiKey
+    read -p "请输入用于识别ApiHost/ApiKey的用户名: " username
+    if [[ -z "$username" ]]; then
+        echo "错误：用户名不能为空。"
+        return 1
+    fi
+
+    mkdir -p "$API_CRED_DIR"
+    local USER_CONF="$API_CRED_DIR/${username}.conf"
+
+    if [ -f "$USER_CONF" ]; then
+        # shellcheck source=/dev/null
+        source "$USER_CONF"
         api_host="$API_HOST"
         api_key="$API_KEY"
-        echo "已自动读取 ApiHost: $api_host, ApiKey: $api_key"
+        echo "已自动读取用户 '$username' 的 ApiHost: $api_host"
     else
+        echo "未找到用户 '$username' 的凭证，请输入新的凭证。"
         read -p "请输入面板ApiHost: " api_host
         if [[ -z "$api_host" ]]; then
             echo "错误：ApiHost 不能为空。"
@@ -392,9 +404,9 @@ add_node() {
             echo "错误：ApiKey 不能为空。"
             return 1
         fi
-        echo "API_HOST=$api_host" > "$API_CONF"
-        echo "API_KEY=$api_key" >> "$API_CONF"
-        echo "已保存 ApiHost 和 ApiKey 到 $API_CONF"
+        echo "API_HOST=\"$api_host\"" > "$USER_CONF"
+        echo "API_KEY=\"$api_key\"" >> "$USER_CONF"
+        echo "已为用户 '$username' 保存 ApiHost 和 ApiKey 到 $USER_CONF"
     fi
 
     # 新增：是否设置SpeedLimit
@@ -699,6 +711,112 @@ update_self_script() {
     echo "脚本已更新为最新版本（/usr/local/bin/xrayr.sh）。"
 }
 
+# --- API凭证管理功能 ---
+list_api_credentials() {
+    echo "--- 已保存的用户凭证列表 ---"
+    if [ ! -d "$API_CRED_DIR" ] || [ -z "$(ls -A "$API_CRED_DIR" 2>/dev/null)" ]; then
+        echo "没有找到任何已保存的用户凭证。"
+        return
+    fi
+
+    for file in "$API_CRED_DIR"/*.conf; do
+        if [ -f "$file" ]; then
+            local username=$(basename "$file" .conf)
+            # shellcheck source=/dev/null
+            source "$file"
+            echo "用户名: $username"
+            echo "  ApiHost: $API_HOST"
+            # For security, we don't display the ApiKey
+            echo "  ApiKey: ******"
+            echo "----------------------------------"
+        fi
+    done
+}
+
+add_update_api_credential() {
+    read -p "请输入要添加/更新的用户名: " username
+    if [[ -z "$username" ]]; then
+        echo "错误：用户名不能为空。"
+        return 1
+    fi
+
+    read -p "请输入面板ApiHost: " api_host
+    if [[ -z "$api_host" ]]; then
+        echo "错误：ApiHost 不能为空。"
+        return 1
+    fi
+
+    read -p "请输入面板ApiKey: " api_key
+    if [[ -z "$api_key" ]]; then
+        echo "错误：ApiKey 不能为空。"
+        return 1
+    fi
+
+    mkdir -p "$API_CRED_DIR"
+    local USER_CONF="$API_CRED_DIR/${username}.conf"
+
+    echo "API_HOST=\"$api_host\"" > "$USER_CONF"
+    echo "API_KEY=\"$api_key\"" >> "$USER_CONF"
+
+    echo "已为用户 '$username' 保存/更新凭证。"
+}
+
+delete_api_credential() {
+    list_api_credentials
+    read -p "请输入要删除的用户名: " username
+    if [[ -z "$username" ]]; then
+        echo "错误：用户名不能为空。"
+        return 1
+    fi
+
+    local USER_CONF="$API_CRED_DIR/${username}.conf"
+
+    if [ -f "$USER_CONF" ]; then
+        confirm "确定要删除用户 '$username' 的凭证吗?" "n"
+        if [[ $? == 0 ]]; then
+            rm "$USER_CONF"
+            echo "用户 '$username' 的凭证已删除。"
+        else
+            echo "操作已取消。"
+        fi
+    else
+        echo "错误：未找到用户 '$username' 的凭证。"
+    fi
+}
+
+manage_api_credentials_menu() {
+    clear
+    echo -e "
+  ${green}API 凭证管理${plain}
+--------------------
+${green}1.${plain} 列出所有用户凭证
+${green}2.${plain} 添加/更新用户凭证
+${green}3.${plain} 删除用户凭证
+${green}0.${plain} 返回主菜单
+"
+    read -p "请选择操作: " choice
+    case $choice in
+        1)
+            list_api_credentials
+            ;;
+        2)
+            add_update_api_credential
+            ;;
+        3)
+            delete_api_credential
+            ;;
+        0)
+            return
+            ;;
+        *)
+            echo -e "${red}无效选项${plain}"
+            ;;
+    esac
+    echo && echo -n -e "${yellow}按回车返回凭证管理菜单: ${plain}" && read temp
+    manage_api_credentials_menu
+}
+# --- API凭证管理功能结束 ---
+
 # 主执行逻辑
 main() {
     # 根据用户选择执行相应的操作
@@ -747,6 +865,9 @@ main() {
             ;;
         15)
             update_self_script
+            ;;
+        16)
+            manage_api_credentials_menu
             ;;
         0)
             echo -e "${green}退出脚本。${plain}"
