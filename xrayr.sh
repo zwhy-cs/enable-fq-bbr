@@ -212,11 +212,9 @@ add_node() {
     # 根据是否启用Reality来设置其他参数
     if [[ "$enable_reality" == "y" ]]; then
         enable_vless=true
-        disable_local_reality=true
         enable_reality_flag=true # 使用不同的变量名以区分输入的 "y/n"
     else
         enable_vless=false
-        disable_local_reality=true
         enable_reality_flag=false
     fi
 
