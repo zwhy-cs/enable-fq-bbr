@@ -1,40 +1,247 @@
 #!/bin/bash
 
+# 颜色定义
+red='\033[0;31m'
+green='\033[0;32m'
+yellow='\033[0;33m'
+plain='\033[0m'
+
+version="v1.0.0"
+
+# check root
+[[ $EUID -ne 0 ]] && echo -e "${red}错误: ${plain} 必须使用root用户运行此脚本！\n" && exit 1
+
+# check os
+if [[ -f /etc/redhat-release ]]; then
+    release="centos"
+elif cat /etc/issue | grep -Eqi "debian"; then
+    release="debian"
+elif cat /etc/issue | grep -Eqi "ubuntu"; then
+    release="ubuntu"
+elif cat /etc/issue | grep -Eqi "centos|red hat|redhat"; then
+    release="centos"
+elif cat /proc/version | grep -Eqi "debian"; then
+    release="debian"
+elif cat /proc/version | grep -Eqi "ubuntu"; then
+    release="ubuntu"
+elif cat /proc/version | grep -Eqi "centos|red hat|redhat"; then
+    release="centos"
+else
+    echo -e "${red}未检测到系统版本，请联系脚本作者！${plain}\n" && exit 1
+fi
+
+os_version=""
+
+# os version
+if [[ -f /etc/os-release ]]; then
+    os_version=$(awk -F'[= ."]' '/VERSION_ID/{print $3}' /etc/os-release)
+fi
+if [[ -z "$os_version" && -f /etc/lsb-release ]]; then
+    os_version=$(awk -F'[= ."]+' '/DISTRIB_RELEASE/{print $2}' /etc/lsb-release)
+fi
+
+if [[ x"${release}" == x"centos" ]]; then
+    if [[ ${os_version} -le 6 ]]; then
+        echo -e "${red}请使用 CentOS 7 或更高版本的系统！${plain}\n" && exit 1
+    fi
+elif [[ x"${release}" == x"ubuntu" ]]; then
+    if [[ ${os_version} -lt 16 ]]; then
+        echo -e "${red}请使用 Ubuntu 16 或更高版本的系统！${plain}\n" && exit 1
+    fi
+elif [[ x"${release}" == x"debian" ]]; then
+    if [[ ${os_version} -lt 8 ]]; then
+        echo -e "${red}请使用 Debian 8 或更高版本的系统！${plain}\n" && exit 1
+    fi
+fi
+
+# 确认函数
+confirm() {
+    if [[ $# > 1 ]]; then
+        echo && read -p "$1 [默认$2]: " temp
+        if [[ x"${temp}" == x"" ]]; then
+            temp=$2
+        fi
+    else
+        read -p "$1 [y/n]: " temp
+    fi
+    if [[ x"${temp}" == x"y" || x"${temp}" == x"Y" ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # 定义XrayR配置文件路径
 CONFIG_FILE="/etc/XrayR/config.yml"
 
-# 目录栏
-echo "--------------------------------------------------"
-echo " XrayR 管理脚本"
-echo "--------------------------------------------------"
-echo "1. 安装 XrayR"
-echo "2. 重启 XrayR"
-echo "3. 添加节点"
-echo "4. 删除节点" # 新增选项
-echo "5. 一键删除所有XrayR相关文件和配置" # 原来的 5 变为 6
-echo "6. 查看当前XrayR配置" # 新增查看配置选项
-echo "7. 使用nano编辑config.yml" # 新增nano编辑选项
-echo "8. 更新 XrayR" # 新增更新选项
-echo "9. 退出" # 退出移到最后一行
-echo "10. 更新本脚本"
-read -p "请选择操作： " choice
+# 系统服务状态检查函数
+# 0: running, 1: not running, 2: not installed
+check_status() {
+    if [[ ! -f /etc/systemd/system/XrayR.service ]]; then
+        return 2
+    fi
+    temp=$(systemctl status XrayR | grep Active | awk '{print $3}' | cut -d "(" -f2 | cut -d ")" -f1)
+    if [[ x"${temp}" == x"running" ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+check_enabled() {
+    temp=$(systemctl is-enabled XrayR)
+    if [[ x"${temp}" == x"enabled" ]]; then
+        return 0
+    else
+        return 1;
+    fi
+}
+
+check_install() {
+    check_status
+    if [[ $? == 2 ]]; then
+        echo ""
+        echo -e "${red}请先安装XrayR${plain}"
+        return 1
+    else
+        return 0
+    fi
+}
+
+show_status() {
+    check_status
+    case $? in
+        0)
+            echo -e "XrayR状态: ${green}已运行${plain}"
+            show_enable_status
+            ;;
+        1)
+            echo -e "XrayR状态: ${yellow}未运行${plain}"
+            show_enable_status
+            ;;
+        2)
+            echo -e "XrayR状态: ${red}未安装${plain}"
+    esac
+}
+
+show_enable_status() {
+    check_enabled
+    if [[ $? == 0 ]]; then
+        echo -e "是否开机自启: ${green}是${plain}"
+    else
+        echo -e "是否开机自启: ${red}否${plain}"
+    fi
+}
+
+# 显示菜单函数
+show_menu() {
+    echo -e "
+  ${green}XrayR 管理脚本${plain}
+  ${green}--- 增强版本 ---${plain}
+    "
+    show_status
+    echo -e "
+--------------------------------------------------
+ XrayR 管理脚本
+--------------------------------------------------
+${green}1.${plain} 安装 XrayR
+${green}2.${plain} 重启 XrayR  
+${green}3.${plain} 添加节点
+${green}4.${plain} 删除节点
+${green}5.${plain} 一键删除所有XrayR相关文件和配置
+${green}6.${plain} 查看当前XrayR配置
+${green}7.${plain} 使用nano编辑config.yml
+${green}8.${plain} 更新 XrayR
+————————————————
+${green}9.${plain} 启动 XrayR
+${green}10.${plain} 停止 XrayR
+${green}11.${plain} 查看 XrayR 状态
+${green}12.${plain} 查看 XrayR 日志
+${green}13.${plain} 设置 XrayR 开机自启
+${green}14.${plain} 取消 XrayR 开机自启
+————————————————
+${green}15.${plain} 更新本脚本
+${green}0.${plain} 退出
+"
+    read -p "请选择操作： " choice
+}
+
+# 添加新的系统服务管理函数
+start_xrayr() {
+    check_status
+    if [[ $? == 0 ]]; then
+        echo ""
+        echo -e "${green}XrayR已运行，无需再次启动${plain}"
+    else
+        systemctl start XrayR
+        sleep 2
+        check_status
+        if [[ $? == 0 ]]; then
+            echo -e "${green}XrayR 启动成功${plain}"
+        else
+            echo -e "${red}XrayR可能启动失败，请使用选项12查看日志${plain}"
+        fi
+    fi
+}
+
+stop_xrayr() {
+    systemctl stop XrayR
+    sleep 2
+    check_status
+    if [[ $? == 1 ]]; then
+        echo -e "${green}XrayR 停止成功${plain}"
+    else
+        echo -e "${red}XrayR停止失败${plain}"
+    fi
+}
+
+status_xrayr() {
+    systemctl status XrayR --no-pager -l
+}
+
+enable_xrayr() {
+    systemctl enable XrayR
+    if [[ $? == 0 ]]; then
+        echo -e "${green}XrayR 设置开机自启成功${plain}"
+    else
+        echo -e "${red}XrayR 设置开机自启失败${plain}"
+    fi
+}
+
+disable_xrayr() {
+    systemctl disable XrayR
+    if [[ $? == 0 ]]; then
+        echo -e "${green}XrayR 取消开机自启成功${plain}"
+    else
+        echo -e "${red}XrayR 取消开机自启失败${plain}"
+    fi
+}
+
+show_log() {
+    journalctl -u XrayR.service -e --no-pager -f
+}
+
+before_show_menu() {
+    echo && echo -n -e "${yellow}按回车返回主菜单: ${plain}" && read temp
+    show_menu
+}
 
 # 安装 XrayR
 install_xrayr() {
-    echo "正在安装 XrayR..."
+    echo -e "${green}正在安装 XrayR...${plain}"
 
     # 确保 /etc/XrayR 目录存在
     mkdir -p /etc/XrayR
 
     # 检查并安装 unzip
     if ! command -v unzip &> /dev/null; then
-        echo "正在安装 unzip..."
+        echo -e "${yellow}正在安装 unzip...${plain}"
         if command -v apt-get &> /dev/null; then
             apt-get update && apt-get install -y unzip
         elif command -v yum &> /dev/null; then
             yum install -y unzip
         else
-            echo "错误：无法自动安装 unzip。请手动安装后重试。"
+            echo -e "${red}错误：无法自动安装 unzip。请手动安装后重试。${plain}"
             return 1
         fi
     fi
@@ -92,7 +299,7 @@ ConnectionConfig:
   BufferSize: 64 # The internal cache size of each connection, kB
 Nodes:
 EOF
-    echo "XrayR 安装并初始化配置文件完成。"
+    echo -e "${green}XrayR 安装并初始化配置文件完成。${plain}"
 
     # 覆盖 dns.json
     cat > /etc/XrayR/dns.json <<EOF
@@ -130,25 +337,19 @@ EOF
 
 # 重启 XrayR
 restart_xrayr() {
-    echo "正在重启 XrayR..."
-    # 检查 XrayR 命令是否存在
-    if command -v XrayR &> /dev/null; then
-        XrayR restart
-        echo "XrayR 已重启。"
-    else
-        echo "错误：未找到 XrayR 命令。请确保 XrayR 已正确安装并配置在 PATH 中。"
-        # 尝试使用 systemctl (如果存在)
-        if command -v systemctl &> /dev/null; then
-            echo "尝试使用 systemctl 重启 XrayR 服务..."
-            systemctl restart XrayR
-            if systemctl is-active --quiet XrayR; then
-                echo "XrayR 服务已通过 systemctl 重启。"
-            else
-                echo "使用 systemctl 重启 XrayR 服务失败。"
-            fi
+    echo -e "${yellow}正在重启 XrayR...${plain}"
+    # 使用 systemctl 重启服务
+    if command -v systemctl &> /dev/null; then
+        systemctl restart XrayR
+        sleep 2
+        check_status
+        if [[ $? == 0 ]]; then
+            echo -e "${green}XrayR 重启成功${plain}"
         else
-             echo "也未找到 systemctl 命令。无法自动重启 XrayR。"
+            echo -e "${red}XrayR 重启失败，请查看日志${plain}"
         fi
+    else
+        echo -e "${red}未找到 systemctl 命令，无法重启服务${plain}"
     fi
 }
 
@@ -441,25 +642,22 @@ view_config() {
 
 # 一键删除所有XrayR相关文件和配置
 remove_all_xrayr() {
-    echo "警告：即将删除所有XrayR相关文件和配置！"
-    read -p "确定要继续吗？(y/n): " confirm
-    if [[ "$confirm" == "y" ]]; then
-        echo "正在停止 XrayR 服务..."
+    echo -e "${red}警告：即将删除所有XrayR相关文件和配置！${plain}"
+    confirm "确定要继续吗？" "n"
+    if [[ $? == 0 ]]; then
+        echo -e "${yellow}正在停止 XrayR 服务...${plain}"
         systemctl stop XrayR 2>/dev/null
         systemctl disable XrayR 2>/dev/null
-        # 尝试使用 XrayR 命令停止 (如果 systemctl 失败或不存在)
-        if command -v XrayR &> /dev/null; then
-            XrayR stop 2>/dev/null
-        fi
-        echo "正在删除 XrayR 文件和目录..."
+        echo -e "${yellow}正在删除 XrayR 文件和目录...${plain}"
         rm -rf /etc/XrayR
         rm -rf /usr/local/XrayR
         rm -f /etc/systemd/system/XrayR.service
-        echo "正在重新加载 systemd 配置..."
+        echo -e "${yellow}正在重新加载 systemd 配置...${plain}"
         systemctl daemon-reload 2>/dev/null
-        echo "所有XrayR相关文件和配置已删除。"
+        systemctl reset-failed 2>/dev/null
+        echo -e "${green}所有XrayR相关文件和配置已删除。${plain}"
     else
-        echo "操作已取消。"
+        echo -e "${yellow}操作已取消。${plain}"
     fi
 }
 
@@ -500,43 +698,104 @@ update_self_script() {
     echo "脚本已更新为最新版本（/usr/local/bin/xrayr.sh）。"
 }
 
-# 根据用户选择执行相应的操作
-case $choice in
-    1)
-        install_xrayr
-        ;;
-    2)
-        restart_xrayr
-        ;;
-    3)
-        add_node
-        ;;
-    4)
-        delete_node
-        ;;
-    5)
-        remove_all_xrayr
-        ;;
-    6)
-        view_config
-        ;;
-    7)
-        edit_config
-        ;;
-    8)
-        update_xrayr
-        ;;
-    9)
-        echo "退出脚本。"
-        exit 0
-        ;;
-    10)
-        update_self_script
-        ;;
-    *)
-        echo "无效选项，退出脚本。"
-        exit 1
-        ;;
-esac
+# 主执行逻辑
+main() {
+    # 根据用户选择执行相应的操作
+    case $choice in
+        1)
+            install_xrayr
+            ;;
+        2)
+            restart_xrayr
+            ;;
+        3)
+            add_node
+            ;;
+        4)
+            delete_node
+            ;;
+        5)
+            remove_all_xrayr
+            ;;
+        6)
+            view_config
+            ;;
+        7)
+            edit_config
+            ;;
+        8)
+            update_xrayr
+            ;;
+        9)
+            check_install && start_xrayr
+            ;;
+        10)
+            check_install && stop_xrayr
+            ;;
+        11)
+            check_install && status_xrayr
+            ;;
+        12)
+            check_install && show_log
+            ;;
+        13)
+            check_install && enable_xrayr
+            ;;
+        14)
+            check_install && disable_xrayr
+            ;;
+        15)
+            update_self_script
+            ;;
+        0)
+            echo -e "${green}退出脚本。${plain}"
+            exit 0
+            ;;
+        *)
+            echo -e "${red}无效选项，请重新选择。${plain}"
+            ;;
+    esac
+    
+    # 执行完操作后返回菜单
+    before_show_menu
+}
 
-exit 0
+# 命令行参数支持
+if [[ $# > 0 ]]; then
+    case $1 in
+        "start") check_install 0 && start_xrayr 0
+        ;;
+        "stop") check_install 0 && stop_xrayr 0
+        ;;
+        "restart") check_install 0 && restart_xrayr 0
+        ;;
+        "status") check_install 0 && status_xrayr 0
+        ;;
+        "enable") check_install 0 && enable_xrayr 0
+        ;;
+        "disable") check_install 0 && disable_xrayr 0
+        ;;
+        "log") check_install 0 && show_log 0
+        ;;
+        "install") install_xrayr 0
+        ;;
+        "uninstall") check_install 0 && remove_all_xrayr 0
+        ;;
+        "add") add_node 0
+        ;;
+        "delete") delete_node 0
+        ;;
+        "config") view_config 0
+        ;;
+        "edit") edit_config 0
+        ;;
+        "update") update_xrayr 0
+        ;;
+        *) echo -e "${red}无效参数${plain}"
+           echo "使用方法: $0 [start|stop|restart|status|enable|disable|log|install|uninstall|add|delete|config|edit|update]"
+        ;;
+    esac
+else
+    show_menu
+    main
+fi
