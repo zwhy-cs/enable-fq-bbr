@@ -38,7 +38,8 @@ enable_show_menu() {
   echo "5) 删除节点"
   echo "6) 检查服务状态"
   echo "7) 更新/修改 Soga 版本"
-  echo "8) 一键删除全部"
+  echo "8) 删除指定 Soga 服务"
+  echo "9) 一键删除全部"
   echo "0) 退出"
   echo "========================================="
 }
@@ -259,6 +260,50 @@ update_soga() {
   read -p "按回车键返回菜单..." _
 }
 
+# 删除指定的 Soga 服务
+delete_soga_instance() {
+  echo " >>> 删除指定的 Soga 服务..."
+  
+  echo "当前已安装的服务 (server_type):"
+  local soga_services
+  soga_services=$(find "$SOGA_DIR" -mindepth 1 -maxdepth 1 -type d -exec basename {} \;)
+  
+  if [ -z "$soga_services" ]; then
+    echo "未找到任何 Soga 服务。"
+    read -p "按回车键返回菜单..." _
+    return
+  fi
+  echo "$soga_services"
+
+  if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
+  
+  local server_type
+  server_type=$(basename "$(dirname "$COMPOSE_FILE")")
+
+  read -p "!!! 警告：此操作将删除 Soga 服务 ($server_type) 的配置和容器，且无法恢复。是否继续？(y/N): " confirm
+  if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+    echo "操作已取消。"
+    read -p "按回车键返回菜单..." _
+    return
+  fi
+
+  echo ">>> 正在停止并删除 Soga 服务 ($server_type)..."
+  docker compose -f "$COMPOSE_FILE" down --rmi all -v --remove-orphans || echo "处理 $COMPOSE_FILE 时出错，但将继续。"
+
+  echo ">>> 正在删除 Soga 配置目录..."
+  local soga_instance_dir
+  soga_instance_dir=$(dirname "$COMPOSE_FILE")
+  if [ -d "$soga_instance_dir" ]; then
+    rm -rf "$soga_instance_dir"
+    echo "配置目录 $soga_instance_dir 已删除。"
+  else
+    echo "配置目录 $soga_instance_dir 未找到。"
+  fi
+  
+  echo "Soga 服务 ($server_type) 已成功删除。"
+  read -p "按回车键返回菜单..." _
+}
+
 # 一键删除全部
 delete_all_soga() {
   read -p "!!! 警告：此操作将删除所有Soga配置和容器，且无法恢复。是否继续？(y/N): " confirm
@@ -292,7 +337,7 @@ delete_all_soga() {
 # 主循环
 while true; do
   enable_show_menu
-  read -p "请输入选项 [0-8]: " choice
+  read -p "请输入选项 [0-9]: " choice
   case "$choice" in
     1) install_soga  ;; 
     2) edit_soga     ;; 
@@ -301,7 +346,8 @@ while true; do
     5) delete_node   ;; 
     6) check_services;; 
     7) update_soga   ;;
-    8) delete_all_soga ;;
+    8) delete_soga_instance ;;
+    9) delete_all_soga ;;
     0) echo "退出脚本。"; exit 0 ;; 
     *) echo "无效选项，请重新输入。"; read -p "按回车键继续..." _;;
   esac
