@@ -223,15 +223,9 @@ install_soga() {
   webapi_url=$(echo "$credential_data" | jq -r '.url')
   webapi_key=$(echo "$credential_data" | jq -r '.key')
 
-  read -p "请输入此Soga实例的唯一名称 (例如 v2ray-us): " instance_name
+  read -p "请输入此Soga实例的名称 (例如 v2ray-us): " instance_name
   if [ -z "$instance_name" ]; then
       echo "实例名称不能为空。"
-      read -p "按回车键返回菜单..." _
-      return
-  fi
-
-  if [ -d "$SOGA_DIR/$instance_name" ]; then
-      echo "错误：实例 '$instance_name' 已存在。"
       read -p "按回车键返回菜单..." _
       return
   fi
@@ -243,9 +237,15 @@ install_soga() {
       return
   fi
 
-  read -p "请输入容器名称 (默认为: soga-$instance_name): " container_name
-  container_name=${container_name:-"soga-$instance_name"}
-  
+  local service_name="${instance_name}-${server_type}"
+  local container_name="$service_name"
+
+  if [ -d "$SOGA_DIR/$service_name" ]; then
+      echo "错误：服务实例 '$service_name' 已存在。"
+      read -p "按回车键返回菜单..." _
+      return
+  fi
+
   if docker ps -a --format '{{.Names}}' | grep -Eq "^${container_name}$"; then
     echo "错误：容器名称 '$container_name' 已存在，请使用其他名称。"
     read -p "按回车键返回菜单..." _
@@ -256,8 +256,8 @@ install_soga() {
   soga_version=${soga_version:-latest}
   echo "node_id 将留空，请使用"添加节点"功能添加。"
 
-  mkdir -p "$SOGA_DIR/$instance_name"
-  COMPOSE_FILE="$SOGA_DIR/$instance_name/docker-compose.yml"
+  mkdir -p "$SOGA_DIR/$service_name"
+  COMPOSE_FILE="$SOGA_DIR/$service_name/docker-compose.yml"
   cat > "$COMPOSE_FILE" << EOF
 version: "3.3"
 
@@ -268,7 +268,7 @@ services:
     restart: always
     network_mode: host
     volumes:
-      - /etc/soga/$instance_name/:/etc/soga/
+      - /etc/soga/$service_name/:/etc/soga/
     environment:
       - type=xboard
       - server_type=$server_type
