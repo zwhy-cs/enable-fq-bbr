@@ -70,6 +70,7 @@ enable_show_menu() {
   echo "9) 删除指定 Soga 服务"
   echo "10) 一键删除全部"
   echo "11) 查看 docker-compose.yml 配置"
+  echo "12) 查看日志"
   echo "0) 退出"
   echo "========================================="
 }
@@ -509,6 +510,26 @@ view_soga_compose() {
   read -p "按回车键返回菜单..." _
 }
 
+# 查看 Soga 日志
+view_soga_logs() {
+  echo " >>> 查看 Soga 服务日志..."
+  if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
+  
+  local container_name
+  container_name=$(grep -oP 'container_name: \K[^ ]*' "$COMPOSE_FILE")
+  
+  if [ -z "$container_name" ]; then
+    echo "在 $COMPOSE_FILE 中找不到容器名称。"
+    read -p "按回车键返回菜单..." _
+    return
+  fi
+  
+  echo "正在显示容器 '$container_name' 的日志 (按 Ctrl+C 停止)..."
+  docker logs --tail 100 -f "$container_name"
+  echo "日志查看已停止。"
+  read -p "按回车键返回菜单..." _
+}
+
 # 一键删除全部
 delete_all_soga() {
   read -p "!!! 警告：此操作将删除所有Soga配置和容器，且无法恢复。是否继续？(y/N): " confirm
@@ -542,7 +563,7 @@ delete_all_soga() {
 # 主循环
 while true; do
   enable_show_menu
-  read -p "请输入选项 [0-11]: " choice
+  read -p "请输入选项 [0-12]: " choice
   case "$choice" in
     1) install_soga  ;;
     2) manage_credentials ;;
@@ -555,6 +576,7 @@ while true; do
     9) delete_soga_instance ;;
     10) delete_all_soga ;;
     11) view_soga_compose ;;
+    12) view_soga_logs ;;
     0) echo "退出脚本。"; exit 0 ;; 
     *) echo "无效选项，请重新输入。"; read -p "按回车键继续..." _;;
   esac
