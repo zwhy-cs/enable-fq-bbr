@@ -18,12 +18,41 @@ check_install_docker() {
   fi
 }
 
+# 检查并安装 jq
+check_install_jq() {
+  if ! command -v jq &> /dev/null; then
+    echo "未检测到 jq，正在尝试安装..."
+    if command -v apt-get &> /dev/null; then
+      apt-get update >/dev/null && apt-get install -y jq
+    elif command -v yum &> /dev/null; then
+      yum install -y epel-release && yum install -y jq
+    elif command -v pacman &> /dev/null; then
+      pacman -Syu --noconfirm jq
+    else
+      echo "无法自动安装 jq，请手动安装后重试。"
+      exit 1
+    fi
+    echo "jq 安装完成"
+  fi
+}
+
 # 执行检查安装
 check_install_docker
+check_install_jq
 
 SOGA_DIR="/etc/soga"
+CREDENTIALS_FILE="$SOGA_DIR/credentials.json"
 DEFAULT_COMPOSE_FILE="$SOGA_DIR/docker-compose.yml"
 COMPOSE_FILE=""
+
+# 初始化凭证文件
+init_credentials_file() {
+    mkdir -p "$SOGA_DIR"
+    if [ ! -f "$CREDENTIALS_FILE" ]; then
+        echo '[]' > "$CREDENTIALS_FILE"
+    fi
+}
+init_credentials_file
 
 # 显示菜单
 enable_show_menu() {
@@ -32,53 +61,215 @@ enable_show_menu() {
   echo "        Soga 后端管理脚本               "
   echo "========================================="
   echo "1) 安装 Soga"
-  echo "2) 编辑 Soga 配置"
-  echo "3) 重启 Soga 服务"
-  echo "4) 添加节点"
-  echo "5) 删除节点"
-  echo "6) 检查服务状态"
-  echo "7) 更新/修改 Soga 版本"
-  echo "8) 删除指定 Soga 服务"
-  echo "9) 一键删除全部"
+  echo "2) 管理API凭证"
+  echo "3) 编辑 Soga 配置"
+  echo "4) 重启 Soga 服务"
+  echo "5) 添加节点"
+  echo "6) 删除节点"
+  echo "7) 检查服务状态"
+  echo "8) 更新/修改 Soga 版本"
+  echo "9) 删除指定 Soga 服务"
+  echo "10) 一键删除全部"
   echo "0) 退出"
   echo "========================================="
 }
 
 # 选择服务类型对应的 compose 文件
 enable_choose_compose() {
-  read -p "请输入 server_type (对应 compose 文件后缀，如 ss、v2ray、trojan): " sts
-  file="$SOGA_DIR/$sts/docker-compose-$sts.yml"
-  if [ ! -f "$file" ]; then
-    echo "找不到文件 $file，请确认已安装对应服务。"
-    return 1
+  echo ">>> 请选择一个服务实例:"
+  local service_dirs=()
+  while IFS= read -r -d $'\0'; do
+      local dir_name
+      dir_name=$(basename "$REPLY")
+      # 凭证文件不是一个服务实例，跳过它
+      if [ "$dir_name" == "credentials.json" ]; then
+          continue
+      fi
+      service_dirs+=("$dir_name")
+  done < <(find "$SOGA_DIR" -mindepth 1 -maxdepth 1 -print0)
+
+  if [ ${#service_dirs[@]} -eq 0 ]; then
+      echo "未找到任何 Soga 服务实例。"
+      return 1
   fi
-  COMPOSE_FILE="$file"
+
+  local i=0
+  for dir in "${service_dirs[@]}"; do
+      printf "%s) %s\n" "$((i+1))" "$dir"
+      i=$((i+1))
+  done
+
+  read -p "请输入选择的编号: " choice
+  if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "${#service_dirs[@]}" ]; then
+      echo "无效的选择。"
+      return 1
+  fi
+
+  local selected_instance
+  selected_instance=${service_dirs[$((choice-1))]}
+  COMPOSE_FILE="$SOGA_DIR/$selected_instance/docker-compose.yml"
+  
+  if [ ! -f "$COMPOSE_FILE" ]; then
+      echo "错误: 找不到 Compose 文件: $COMPOSE_FILE"
+      return 1
+  fi
+  
   return 0
 }
+
+# 凭证管理
+add_credential() {
+  read -p "请输入凭证名称 (例如 user1): " name
+  if [ -z "$name" ]; then echo "名称不能为空"; return; fi
+  read -p "请输入 webapi_url (含 https://、以 / 结尾): " url
+  if [ -z "$url" ]; then echo "URL 不能为空"; return; fi
+  read -p "请输入 webapi_key: " key
+  if [ -z "$key" ]; then echo "Key 不能为空"; return; fi
+
+  # 检查名称是否重复
+  if jq -e --arg name "$name" '.[] | select(.name == $name)' "$CREDENTIALS_FILE" > /dev/null; then
+    echo "错误：该名称的凭证已存在。"
+    return
+  fi
+  
+  local temp_file
+  temp_file=$(mktemp)
+  jq --arg name "$name" --arg url "$url" --arg key "$key" \
+    '. += [{"name": $name, "url": $url, "key": $key}]' \
+    "$CREDENTIALS_FILE" > "$temp_file" && mv "$temp_file" "$CREDENTIALS_FILE"
+  
+  echo "凭证 '$name' 已添加。"
+  read -p "按回车键继续..." _
+}
+
+list_credentials() {
+  echo ">>> 可用的API凭证:"
+  if ! jq -e 'any' "$CREDENTIALS_FILE" >/dev/null; then
+    echo "没有找到任何凭证。"
+    return 1
+  fi
+  jq -r '.[] | .name' "$CREDENTIALS_FILE" | cat -n
+  return 0
+}
+
+delete_credential() {
+  if ! list_credentials; then
+    read -p "按回车键继续..." _
+    return
+  fi
+  read -p "请输入要删除的凭证编号: " choice
+  if ! [[ "$choice" =~ ^[0-9]+$ ]]; then echo "无效输入"; return; fi
+
+  local index=$((choice - 1))
+  local len
+  len=$(jq 'length' "$CREDENTIALS_FILE")
+  if [ "$index" -lt 0 ] || [ "$index" -ge "$len" ]; then
+    echo "无效的编号。"
+    return
+  fi
+  
+  local temp_file
+  temp_file=$(mktemp)
+  jq "del(.[$index])" "$CREDENTIALS_FILE" > "$temp_file" && mv "$temp_file" "$CREDENTIALS_FILE"
+  echo "凭证已删除。"
+  read -p "按回车键继续..." _
+}
+
+manage_credentials() {
+  while true; do
+    clear
+    echo "========================================="
+    echo "          API 凭证管理"
+    echo "========================================="
+    echo "1) 添加凭证"
+    echo "2) 列出凭证"
+    echo "3) 删除凭证"
+    echo "0) 返回主菜单"
+    echo "========================================="
+    read -p "请选择一个操作: " cred_choice
+    case "$cred_choice" in
+      1) add_credential ;;
+      2) list_credentials; echo; read -p "按回车键继续..." _ ;;
+      3) delete_credential ;;
+      0) break ;;
+      *) echo "无效选项，请重新输入。"; read -p "按回车键继续..." _ ;;
+    esac
+  done
+}
+
 
 # 安装函数
 install_soga() {
   echo " >>> 安装 Soga..."
+  
+  if ! list_credentials; then
+    echo "没有可用的API凭证，请先添加。"
+    read -p "按回车键返回菜单..." _
+    return
+  fi
+  read -p "请选择要使用的API凭证编号: " choice
+  if ! [[ "$choice" =~ ^[0-9]+$ ]]; then echo "无效输入"; read -p "按回车键返回菜单..." _; return; fi
+
+  local index=$((choice - 1))
+  local credential_data
+  credential_data=$(jq -r ".[$index]" "$CREDENTIALS_FILE")
+  if [ "$credential_data" == "null" ] || [ -z "$credential_data" ]; then
+      echo "无效的编号。"
+      read -p "按回车键返回菜单..." _
+      return
+  fi
+  
+  local webapi_url
+  local webapi_key
+  webapi_url=$(echo "$credential_data" | jq -r '.url')
+  webapi_key=$(echo "$credential_data" | jq -r '.key')
+
+  read -p "请输入此Soga实例的唯一名称 (例如 v2ray-us): " instance_name
+  if [ -z "$instance_name" ]; then
+      echo "实例名称不能为空。"
+      read -p "按回车键返回菜单..." _
+      return
+  fi
+
+  if [ -d "$SOGA_DIR/$instance_name" ]; then
+      echo "错误：实例 '$instance_name' 已存在。"
+      read -p "按回车键返回菜单..." _
+      return
+  fi
+
   read -p "请输入 server_type (如 ss/v2ray/trojan 等): " server_type
-  read -p "请输入 webapi_url (含 https://、以 / 结尾): " webapi_url
-  read -p "请输入 webapi_key: " webapi_key
+  if [ -z "$server_type" ]; then
+      echo "server_type 不能为空。"
+      read -p "按回车键返回菜单..." _
+      return
+  fi
+
+  read -p "请输入容器名称 (默认为: soga-$instance_name): " container_name
+  container_name=${container_name:-"soga-$instance_name"}
+  
+  if docker ps -a --format '{{.Names}}' | grep -Eq "^${container_name}$"; then
+    echo "错误：容器名称 '$container_name' 已存在，请使用其他名称。"
+    read -p "按回车键返回菜单..." _
+    return
+  fi
+
   read -p "请输入 Soga 版本 (默认为 latest): " soga_version
   soga_version=${soga_version:-latest}
   echo "node_id 将留空，请使用"添加节点"功能添加。"
 
-  mkdir -p "$SOGA_DIR/$server_type"
-  COMPOSE_FILE="$SOGA_DIR/$server_type/docker-compose-$server_type.yml"
+  mkdir -p "$SOGA_DIR/$instance_name"
+  COMPOSE_FILE="$SOGA_DIR/$instance_name/docker-compose.yml"
   cat > "$COMPOSE_FILE" << EOF
 version: "3.3"
 
 services:
   soga:
     image: vaxilu/soga:${soga_version}
-    container_name: soga-$server_type
+    container_name: $container_name
     restart: always
     network_mode: host
     volumes:
-      - /etc/soga/$server_type/:/etc/soga/
+      - /etc/soga/$instance_name/:/etc/soga/
     environment:
       - type=xboard
       - server_type=$server_type
@@ -101,7 +292,7 @@ EOF
 
 # 编辑配置
 edit_soga() {
-  echo " >>> 请选择要编辑的服务 compose 文件"
+  echo " >>> 请选择要编辑的服务实例"
   if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
   echo "编辑文件：$COMPOSE_FILE"
   ${EDITOR:-nano} "$COMPOSE_FILE"
@@ -112,7 +303,7 @@ edit_soga() {
 
 # 重启服务
 restart_soga() {
-  echo " >>> 请选择要重启的服务"
+  echo " >>> 请选择要重启的服务实例"
   if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
   echo "重启服务：$COMPOSE_FILE"
   docker compose -f "$COMPOSE_FILE" up -d
@@ -122,7 +313,7 @@ restart_soga() {
 
 # 添加节点
 add_node() {
-  echo " >>> 添加节点..."
+  echo " >>> 添加节点到服务实例..."
   if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
   
   read -p "请输入 node_id: " node_id
@@ -170,7 +361,7 @@ add_node() {
 
 # 删除节点
 delete_node() {
-  echo " >>> 删除节点..."
+  echo " >>> 从服务实例中删除节点..."
   if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
   
   read -p "请输入要删除的 node_id: " node_id
@@ -231,8 +422,22 @@ check_services() {
   echo "当前运行的服务："
   docker ps | grep soga
   echo ""
-  echo "所有配置文件："
-  ls -l /etc/soga/*/docker-compose-*.yml 2>/dev/null || echo "未找到配置文件"
+  echo "所有配置实例："
+  local service_dirs=()
+  while IFS= read -r -d $'\0'; do
+      local dir_name
+      dir_name=$(basename "$REPLY")
+      if [ "$dir_name" == "credentials.json" ]; then continue; fi
+      service_dirs+=("$dir_name")
+  done < <(find "$SOGA_DIR" -mindepth 1 -maxdepth 1 -print0)
+
+  if [ ${#service_dirs[@]} -eq 0 ]; then
+      echo "未找到任何 Soga 配置实例。"
+  else
+      for dir in "${service_dirs[@]}"; do
+          echo " - $dir (/etc/soga/$dir/docker-compose.yml)"
+      done
+  fi
   read -p "按回车键返回菜单..." _
 }
 
@@ -262,32 +467,21 @@ update_soga() {
 
 # 删除指定的 Soga 服务
 delete_soga_instance() {
-  echo " >>> 删除指定的 Soga 服务..."
+  echo " >>> 删除指定的 Soga 服务实例..."
   
-  echo "当前已安装的服务 (server_type):"
-  local soga_services
-  soga_services=$(find "$SOGA_DIR" -mindepth 1 -maxdepth 1 -type d -exec basename {} \;)
-  
-  if [ -z "$soga_services" ]; then
-    echo "未找到任何 Soga 服务。"
-    read -p "按回车键返回菜单..." _
-    return
-  fi
-  echo "$soga_services"
-
   if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
   
-  local server_type
-  server_type=$(basename "$(dirname "$COMPOSE_FILE")")
+  local instance_name
+  instance_name=$(basename "$(dirname "$COMPOSE_FILE")")
 
-  read -p "!!! 警告：此操作将删除 Soga 服务 ($server_type) 的配置和容器，且无法恢复。是否继续？(y/N): " confirm
+  read -p "!!! 警告：此操作将删除 Soga 服务实例 ($instance_name) 的配置和容器，且无法恢复。是否继续？(y/N): " confirm
   if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
     echo "操作已取消。"
     read -p "按回车键返回菜单..." _
     return
   fi
 
-  echo ">>> 正在停止并删除 Soga 服务 ($server_type)..."
+  echo ">>> 正在停止并删除 Soga 服务 ($instance_name)..."
   docker compose -f "$COMPOSE_FILE" down --rmi all -v --remove-orphans || echo "处理 $COMPOSE_FILE 时出错，但将继续。"
 
   echo ">>> 正在删除 Soga 配置目录..."
@@ -300,7 +494,7 @@ delete_soga_instance() {
     echo "配置目录 $soga_instance_dir 未找到。"
   fi
   
-  echo "Soga 服务 ($server_type) 已成功删除。"
+  echo "Soga 服务 ($instance_name) 已成功删除。"
   read -p "按回车键返回菜单..." _
 }
 
@@ -322,7 +516,7 @@ delete_all_soga() {
   fi
 
   # 查找所有 docker-compose 文件并停止服务
-  find "$SOGA_DIR" -name "docker-compose-*.yml" -print0 | while IFS= read -r -d $'\0' compose_file; do
+  find "$SOGA_DIR" -name "docker-compose.yml" -print0 | while IFS= read -r -d $'\0' compose_file; do
     echo "正在处理 $compose_file..."
     docker compose -f "$compose_file" down --rmi all -v --remove-orphans || echo "处理 $compose_file 时出错，但将继续。"
   done
@@ -337,17 +531,18 @@ delete_all_soga() {
 # 主循环
 while true; do
   enable_show_menu
-  read -p "请输入选项 [0-9]: " choice
+  read -p "请输入选项 [0-10]: " choice
   case "$choice" in
-    1) install_soga  ;; 
-    2) edit_soga     ;; 
-    3) restart_soga  ;; 
-    4) add_node      ;; 
-    5) delete_node   ;; 
-    6) check_services;; 
-    7) update_soga   ;;
-    8) delete_soga_instance ;;
-    9) delete_all_soga ;;
+    1) install_soga  ;;
+    2) manage_credentials ;;
+    3) edit_soga     ;; 
+    4) restart_soga  ;; 
+    5) add_node      ;; 
+    6) delete_node   ;; 
+    7) check_services;; 
+    8) update_soga   ;;
+    9) delete_soga_instance ;;
+    10) delete_all_soga ;;
     0) echo "退出脚本。"; exit 0 ;; 
     *) echo "无效选项，请重新输入。"; read -p "按回车键继续..." _;;
   esac
