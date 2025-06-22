@@ -69,6 +69,7 @@ enable_show_menu() {
   echo "8) 更新/修改 Soga 版本"
   echo "9) 删除指定 Soga 服务"
   echo "10) 一键删除全部"
+  echo "11) 查看 docker-compose.yml 配置"
   echo "0) 退出"
   echo "========================================="
 }
@@ -497,6 +498,17 @@ delete_soga_instance() {
   read -p "按回车键返回菜单..." _
 }
 
+# 查看 docker-compose.yml 配置
+view_soga_compose() {
+  echo " >>> 请选择要查看的服务实例"
+  if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
+  echo "查看文件内容：$COMPOSE_FILE"
+  echo "-----------------------------------------"
+  cat "$COMPOSE_FILE"
+  echo "-----------------------------------------"
+  read -p "按回车键返回菜单..." _
+}
+
 # 一键删除全部
 delete_all_soga() {
   read -p "!!! 警告：此操作将删除所有Soga配置和容器，且无法恢复。是否继续？(y/N): " confirm
@@ -530,7 +542,7 @@ delete_all_soga() {
 # 主循环
 while true; do
   enable_show_menu
-  read -p "请输入选项 [0-10]: " choice
+  read -p "请输入选项 [0-11]: " choice
   case "$choice" in
     1) install_soga  ;;
     2) manage_credentials ;;
@@ -542,6 +554,7 @@ while true; do
     8) update_soga   ;;
     9) delete_soga_instance ;;
     10) delete_all_soga ;;
+    11) view_soga_compose ;;
     0) echo "退出脚本。"; exit 0 ;; 
     *) echo "无效选项，请重新输入。"; read -p "按回车键继续..." _;;
   esac
