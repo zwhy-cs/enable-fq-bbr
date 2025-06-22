@@ -1,5 +1,4 @@
 #!/bin/bash
-set -e
 
 # 确保以 root 权限运行
 if [ "$EUID" -ne 0 ]; then
