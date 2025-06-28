@@ -279,7 +279,7 @@ services:
       - webapi_key=$webapi_key
       - node_id=
       - forbidden_bit_torrent=false
-      - log_level=info
+      - log_level=debug
       - default_dns=1.1.1.1
       - dns_strategy=ipv4_first
 EOF
