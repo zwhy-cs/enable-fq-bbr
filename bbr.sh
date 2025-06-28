@@ -144,9 +144,6 @@ net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 net.ipv4.tcp_wmem = 4096 16384 20000000
 net.ipv4.tcp_rmem = 4096 87380 20000000
-net.ipv6.tcp_congestion_control = bbr
-net.ipv6.tcp_wmem = 4096 16384 20000000
-net.ipv6.tcp_rmem = 4096 87380 20000000
 EOF
 
 # 使 sysctl 配置生效
