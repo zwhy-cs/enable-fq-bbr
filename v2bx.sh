@@ -268,7 +268,7 @@ add_node() {
             ListenIP: "0.0.0.0",
             SendIP: "0.0.0.0",
             DeviceOnlineMinTraffic: 100,
-            EnableProxyProtocol: true,
+            EnableProxyProtocol: false,
             EnableTFO: true,
             EnableDNS: true,
             DNSType: "UseIPv4",
