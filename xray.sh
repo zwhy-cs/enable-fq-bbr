@@ -140,15 +140,14 @@ add_reality_node() {
             "0123456789abcdef"
           ],
           "limitFallbackUpload": {
-            "afterBytes": 0, // 传输指定字节后开始限速
-            "bytesPerSec": 65536, // 基准速率（字节/秒）
-            "burstBytesPerSec": 0 // 突发速率（字节/秒），大于 bytesPerSec 时生效
+            "afterBytes": 0,
+            "bytesPerSec": 65536,
+            "burstBytesPerSec": 0
           },
-          // 对未通过验证的回落连接限速（下载）
           "limitFallbackDownload": {
-            "afterBytes": 10485760, // 传输指定字节后开始限速
-            "bytesPerSec": 262144, // 基准速率（字节/秒）
-            "burstBytesPerSec": 2097152 // 突发速率（字节/秒），大于 bytesPerSec 时生效
+            "afterBytes": 10485760,
+            "bytesPerSec": 262144,
+            "burstBytesPerSec": 2097152
           }
         }
       },
