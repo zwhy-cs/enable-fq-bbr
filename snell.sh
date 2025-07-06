@@ -1,22 +1,12 @@
-#!/bin/bash
-# Snell v4 管理脚本 - 支持安装、卸载、查看状态和配置
-# 请确保在 root 权限下运行
-# 
-# 安装方法:
-# sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/wzxzwhy/enable-fq-bbr/refs/heads/main/snell.sh)"
-# 
-# 创建快捷命令:
-# echo 'alias s="sudo /usr/local/bin/snell-manager.sh"' >> ~/.bashrc && source ~/.bashrc
 
 set -e
 
 # 配置变量
-SNELL_VERSION="4.1.1"
-SNELL_DOWNLOAD_URL="https://dl.nssurge.com/snell/snell-server-v${SNELL_VERSION}-linux-amd64.zip"
 INSTALL_DIR="/usr/local/bin"
-CONFIG_FILE="/etc/snell.conf"
-SYSTEMD_SERVICE="/etc/systemd/system/snell.service"
-LOG_FILE="/var/log/snell.log"
+CONFIG_DIR="/etc/snell"
+LOG_DIR="/var/log/snell"
+SYSTEMD_TEMPLATE_SERVICE="/etc/systemd/system/snell@.service"
+
 
 # 检查是否以root权限运行
 if [ "$(id -u)" -ne 0 ]; then
@@ -24,70 +14,207 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
+# 查找实例
+find_instances() {
+    if [ ! -d "${CONFIG_DIR}" ]; then
+        return
+    fi
+    find "${CONFIG_DIR}" -maxdepth 1 -type f -name "*.conf" -printf "%f\n" | sed 's/\.conf$//'
+}
+
+# 列出实例
+list_instances() {
+    echo "当前 Snell 实例:"
+    INSTANCES=$(find_instances)
+    if [ -z "$INSTANCES" ]; then
+        echo "未找到任何实例。"
+        return 1
+    fi
+    for INSTANCE in $INSTANCES; do
+        echo " - $INSTANCE"
+    done
+}
+
+
 # 显示菜单
 show_menu() {
     clear
-    echo "========== Snell v4 管理脚本 =========="
-    echo "1. 查看当前 Snell 状态"
-    echo "2. 安装 Snell"
-    echo "3. 卸载 Snell"
-    echo "4. 查看当前 Snell 配置"
-    echo "5. 创建快捷命令 's'"
+    echo "========== Snell 多实例管理脚本 =========="
+    echo "1. 查看所有 Snell 实例状态"
+    echo "2. 安装新 Snell 实例"
+    echo "3. 卸载 Snell 实例"
+    echo "4. 重启 Snell 实例"
+    echo "5. 查看实例配置"
+    echo "6. 修改实例配置 (nano)"
+    echo "7. 更新 snell-server 程序"
     echo "0. 退出脚本"
     echo "======================================"
     echo ""
-    read -p "请选择操作 [0-5]: " choice
+    read -p "请选择操作 [0-7]: " choice
 }
 
-# 检查 Snell 是否已安装
+# 检查 snell-server 是否已安装
 is_snell_installed() {
-    if [ -f "${INSTALL_DIR}/snell-server" ] && [ -f "${CONFIG_FILE}" ]; then
-        return 0  # 已安装
+    if [ -f "${INSTALL_DIR}/snell-server" ]; then
+        return 0
     else
-        return 1  # 未安装
+        return 1
     fi
 }
 
 # 查看 Snell 状态
 check_status() {
-    echo "正在检查 Snell 状态..."
+    echo "正在检查所有 Snell 实例状态..."
     
-    if is_snell_installed; then
-        if systemctl is-active --quiet snell; then
-            echo "Snell 服务当前状态: 运行中"
-            systemctl status snell | grep -E "Active:|CGroup:"
-            
-            # 显示当前监听端口
-            PORT=$(grep -oP "listen = 0.0.0.0:\K[0-9]+" ${CONFIG_FILE})
-            echo "当前监听端口: ${PORT}"
-            
-            # 显示网络连接状态
-            echo "网络连接状态:"
-            netstat -tlnp | grep snell-server || ss -tlnp | grep snell-server || echo "无法获取网络连接信息，请确保已安装 netstat 或 ss 工具"
-        else
-            echo "Snell 服务当前状态: 未运行"
-        fi
-    else
-        echo "Snell 未安装或配置文件丢失"
+    INSTANCES=$(find_instances)
+    if [ -z "$INSTANCES" ]; then
+        echo "未找到任何 Snell 实例。"
+        read -p "按任意键返回主菜单..." key
+        return
     fi
+
+    for instance in $INSTANCES; do
+        echo "--- 实例: ${instance} ---"
+        if systemctl is-active --quiet "snell@${instance}"; then
+            echo "状态: 运行中"
+            # 从配置文件获取端口
+            PORT=$(grep -oP 'listen\s*=\s*0\.0\.0\.0:\K[0-9]+' "${CONFIG_DIR}/${instance}.conf")
+            echo "端口: ${PORT}"
+            netstat -tlnp | grep ":${PORT}.*snell-server" || ss -tlnp | grep ":${PORT}.*snell-server" || echo "端口未被 snell-server 监听 (可能是权限问题)"
+        else
+            echo "状态: 未运行"
+        fi
+        echo ""
+    done
     
-    echo ""
     read -p "按任意键返回主菜单..." key
 }
 
+# 更新 snell-server 程序
+update_snell_binary() {
+    # 获取用户输入的Snell版本
+    read -p "请输入要安装的Snell版本(默认 4.1.1): " SNELL_VERSION
+    SNELL_VERSION=${SNELL_VERSION:-"4.1.1"}
+    
+    SNELL_DOWNLOAD_URL="https://dl.nssurge.com/snell/snell-server-v${SNELL_VERSION}-linux-amd64.zip"
+    
+    echo "开始下载并安装 Snell v${SNELL_VERSION}..."
+
+    # 确保依赖已安装
+    for tool in curl unzip; do
+        if ! command -v $tool &>/dev/null; then
+            echo "正在安装 ${tool}..."
+            if [ -x "$(command -v apt-get)" ]; then
+                apt-get update && apt-get install -y $tool
+            elif [ -x "$(command -v yum)" ]; then
+                yum install -y $tool
+            else
+                echo "无法自动安装 ${tool}，请手动安装后重试。"
+                return
+            fi
+        fi
+    done
+    
+    # 创建临时目录并下载
+    TMP_DIR=$(mktemp -d)
+    cd "$TMP_DIR"
+    echo "正在下载 Snell v${SNELL_VERSION}..."
+    if ! curl -L -o snell.zip "$SNELL_DOWNLOAD_URL"; then
+        echo "下载失败，请检查网络连接和下载链接。"
+        cd / && rm -rf "$TMP_DIR"
+        return
+    fi
+    
+    echo "正在解压文件..."
+    if ! unzip snell.zip; then
+        echo "解压失败，请检查下载的文件是否完整。"
+        cd / && rm -rf "$TMP_DIR"
+        return
+    fi
+    
+    # 移动可执行文件
+    if [ -f "snell-server" ]; then
+        # 记录并停止正在运行的实例
+        INSTANCES=$(find_instances)
+        INSTANCES_TO_RESTART=()
+        for instance in $INSTANCES; do
+             if systemctl is-active --quiet "snell@${instance}"; then
+                echo "正在停止实例 ${instance}..."
+                systemctl stop "snell@${instance}"
+                INSTANCES_TO_RESTART+=("$instance")
+             fi
+        done
+
+        mv snell-server ${INSTALL_DIR}/snell-server
+        chmod +x ${INSTALL_DIR}/snell-server
+        echo "snell-server 已更新至 ${INSTALL_DIR}/snell-server"
+
+        # 重启之前正在运行的实例
+        if [ ${#INSTANCES_TO_RESTART[@]} -gt 0 ]; then
+            echo "正在重启之前运行的实例..."
+            for instance in "${INSTANCES_TO_RESTART[@]}"; do
+                echo -n "重启实例 ${instance}... "
+                systemctl start "snell@${instance}"
+                # 等待一秒并检查状态
+                sleep 1
+                if systemctl is-active --quiet "snell@${instance}"; then
+                    echo "[成功]"
+                else
+                    echo "[失败] - 请检查日志: journalctl -u snell@${instance}"
+                fi
+            done
+        fi
+    else
+        echo "错误：未找到 snell-server 可执行文件。"
+    fi
+    
+    # 清理
+    cd / && rm -rf "$TMP_DIR"
+    echo "更新完成。"
+}
+
+
 # 安装 Snell
 install_snell() {
-    if is_snell_installed; then
-        echo "Snell 已经安装。如需重新安装，请先卸载。"
+    if ! is_snell_installed; then
+        echo "未找到 snell-server 程序。请先使用菜单选项 7 更新/安装 snell-server。"
         read -p "按任意键返回主菜单..." key
         return
     fi
     
-    echo "开始安装 Snell v${SNELL_VERSION}..."
+    read -p "请输入新实例的名称 (例如 snell1): " INSTANCE_NAME
+    if [ -z "$INSTANCE_NAME" ]; then
+        echo "实例名称不能为空。"
+        read -p "按任意键返回主菜单..." key
+        return
+    fi
+    if ! [[ "$INSTANCE_NAME" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+        echo "错误: 实例名称只能包含字母、数字、下划线(_)、点(.)和连字符(-)。"
+        read -p "按任意键返回主菜单..." key
+        return
+    fi
+
+    CONFIG_FILE="${CONFIG_DIR}/${INSTANCE_NAME}.conf"
+    if [ -f "$CONFIG_FILE" ]; then
+        echo "错误：实例 '${INSTANCE_NAME}' 已存在。"
+        read -p "按任意键返回主菜单..." key
+        return
+    fi
     
-    # 获取用户输入的监听端口，默认8388
-    read -p "请输入监听端口(默认8388): " PORT
-    PORT=${PORT:-8388}
+    echo "开始为实例 '${INSTANCE_NAME}' 进行配置..."
+    
+    # 获取用户输入的监听端口
+    read -p "请输入监听端口 (例如 8388): " PORT
+    if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+        echo "无效的端口号。"
+        read -p "按任意键返回主菜单..." key
+        return
+    fi
+    if ss -tlnp | grep -q ":${PORT}\s" || netstat -tlnp | grep -q ":${PORT}\s"; then
+        echo "错误: 端口 ${PORT} 已被占用。"
+        read -p "按任意键返回主菜单..." key
+        return
+    fi
     
     # 自动生成预共享密钥(PSK)
     if ! command -v openssl &>/dev/null; then
@@ -106,71 +233,9 @@ install_snell() {
     PSK=$(openssl rand -hex 16)
     echo "自动生成的预共享密钥(PSK)为: ${PSK}"
     
-    # 检查 unzip 是否安装，如果未安装，则安装它
-    if ! command -v unzip &>/dev/null; then
-        echo "未检测到 unzip，正在安装 unzip..."
-        if [ -x "$(command -v apt-get)" ]; then
-            apt-get update && apt-get install -y unzip
-        elif [ -x "$(command -v yum)" ]; then
-            yum install -y unzip
-        else
-            echo "无法检测到包管理工具，请手动安装 unzip。"
-            read -p "按任意键返回主菜单..." key
-            return
-        fi
-    fi
-    
-    # 检查 curl 是否安装，如果未安装，则安装它
-    if ! command -v curl &>/dev/null; then
-        echo "未检测到 curl，正在安装 curl..."
-        if [ -x "$(command -v apt-get)" ]; then
-            apt-get update && apt-get install -y curl
-        elif [ -x "$(command -v yum)" ]; then
-            yum install -y curl
-        else
-            echo "无法检测到包管理工具，请手动安装 curl。"
-            read -p "按任意键返回主菜单..." key
-            return
-        fi
-    fi
-    
-    # 创建临时目录并下载 Snell ZIP 包
-    TMP_DIR=$(mktemp -d)
-    cd "$TMP_DIR"
-    echo "正在下载 Snell v${SNELL_VERSION}..."
-    if ! curl -L -o snell.zip "$SNELL_DOWNLOAD_URL"; then
-        echo "下载失败，请检查网络连接和下载链接。"
-        cd /
-        rm -rf "$TMP_DIR"
-        read -p "按任意键返回主菜单..." key
-        return
-    fi
-    
-    # 解压 ZIP 文件
-    echo "正在解压文件..."
-    if ! unzip snell.zip; then
-        echo "解压失败，请检查下载的文件是否完整。"
-        cd /
-        rm -rf "$TMP_DIR"
-        read -p "按任意键返回主菜单..." key
-        return
-    fi
-    
-    # 检查并移动可执行文件
-    if [ -f "snell-server" ]; then
-        mv snell-server ${INSTALL_DIR}/snell-server
-        chmod +x ${INSTALL_DIR}/snell-server
-    else
-        echo "错误：未找到 snell-server 可执行文件，请检查下载链接和版本号。"
-        cd /
-        rm -rf "$TMP_DIR"
-        read -p "按任意键返回主菜单..." key
-        return
-    fi
-    
-    # 清理临时目录
-    cd /
-    rm -rf "$TMP_DIR"
+    # 创建目录
+    mkdir -p ${CONFIG_DIR}
+    mkdir -p ${LOG_DIR}
     
     # 生成配置文件
     echo "正在创建配置文件 ${CONFIG_FILE}..."
@@ -182,34 +247,36 @@ ipv6 = false
 EOF
     
     # 创建日志文件
-    touch ${LOG_FILE}
-    chmod 644 ${LOG_FILE}
+    touch "${LOG_DIR}/${INSTANCE_NAME}.log"
+    chmod 644 "${LOG_DIR}/${INSTANCE_NAME}.log"
     
-    # 创建 systemd 服务文件
-    echo "正在创建 systemd 服务文件 ${SYSTEMD_SERVICE}..."
-    cat > ${SYSTEMD_SERVICE} <<EOF
+    # 创建 systemd 服务模板文件 (如果不存在)
+    if [ ! -f "${SYSTEMD_TEMPLATE_SERVICE}" ]; then
+        echo "正在创建 systemd 服务模板文件 ${SYSTEMD_TEMPLATE_SERVICE}..."
+        cat > ${SYSTEMD_TEMPLATE_SERVICE} <<EOF
 [Unit]
-Description=Snell v4 Server
+Description=Snell Server (%i)
 After=network.target
 
 [Service]
-ExecStart=${INSTALL_DIR}/snell-server -c ${CONFIG_FILE}
+ExecStart=${INSTALL_DIR}/snell-server -c ${CONFIG_DIR}/%i.conf
 Restart=on-failure
+StandardOutput=append:${LOG_DIR}/%i.log
+StandardError=append:${LOG_DIR}/%i.log
 
 [Install]
 WantedBy=multi-user.target
 EOF
+        systemctl daemon-reload
+    fi
     
-    # 重新加载 systemd 并启动服务
-    echo "正在重新加载 systemd..."
-    systemctl daemon-reload
-    echo "启动 Snell 服务并设置为开机自启..."
-    systemctl enable snell
-    systemctl start snell
+    # 启动服务
+    echo "启动 Snell 实例 '${INSTANCE_NAME}' 并设置为开机自启..."
+    systemctl enable "snell@${INSTANCE_NAME}"
+    systemctl start "snell@${INSTANCE_NAME}"
     
-    echo "Snell v4 安装并启动成功！"
+    echo "Snell 实例 '${INSTANCE_NAME}' 安装并启动成功！"
     echo "配置文件路径: ${CONFIG_FILE}"
-    echo "日志文件路径: ${LOG_FILE}"
     echo "预共享密钥(PSK): ${PSK}"
     echo "监听端口: ${PORT}"
     
@@ -218,46 +285,50 @@ EOF
 
 # 卸载 Snell
 uninstall_snell() {
-    if ! is_snell_installed; then
-        echo "未检测到 Snell 安装，无需卸载。"
+    list_instances
+    if [ $? -ne 0 ]; then
+        read -p "按任意键返回主菜单..." key
+        return
+    fi
+
+    read -p "请输入要卸载的实例名称: " INSTANCE_NAME
+    if [ -z "$INSTANCE_NAME" ]; then
+        echo "实例名称不能为空。"
         read -p "按任意键返回主菜单..." key
         return
     fi
     
-    read -p "确定要卸载 Snell 吗？(y/n): " confirm
+    CONFIG_FILE="${CONFIG_DIR}/${INSTANCE_NAME}.conf"
+    LOG_FILE="${LOG_DIR}/${INSTANCE_NAME}.log"
+    SERVICE_NAME="snell@${INSTANCE_NAME}.service"
+
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "错误: 实例 '${INSTANCE_NAME}' 不存在。"
+        read -p "按任意键返回主菜单..." key
+        return
+    fi
+
+    read -p "确定要卸载实例 '${INSTANCE_NAME}' 吗？(y/n): " confirm
     if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
         echo "卸载已取消"
         read -p "按任意键返回主菜单..." key
         return
     fi
     
-    echo "开始卸载 Snell..."
+    echo "开始卸载实例 '${INSTANCE_NAME}'..."
     
     # 停止并禁用服务
-    if systemctl is-active --quiet snell; then
-        systemctl stop snell
+    if systemctl is-active --quiet "$SERVICE_NAME"; then
+        systemctl stop "$SERVICE_NAME"
     fi
-    if systemctl is-enabled --quiet snell; then
-        systemctl disable snell
-    fi
-    
-    # 删除服务文件
-    if [ -f "${SYSTEMD_SERVICE}" ]; then
-        rm -f "${SYSTEMD_SERVICE}"
-        systemctl daemon-reload
-    fi
-    
-    # 删除可执行文件
-    if [ -f "${INSTALL_DIR}/snell-server" ]; then
-        rm -f "${INSTALL_DIR}/snell-server"
+    if systemctl is-enabled --quiet "$SERVICE_NAME"; then
+        systemctl disable "$SERVICE_NAME"
     fi
     
     # 备份并删除配置文件
-    if [ -f "${CONFIG_FILE}" ]; then
-        cp "${CONFIG_FILE}" "${CONFIG_FILE}.bak"
-        echo "已备份配置文件到 ${CONFIG_FILE}.bak"
-        rm -f "${CONFIG_FILE}"
-    fi
+    cp "${CONFIG_FILE}" "${CONFIG_FILE}.bak"
+    echo "已备份配置文件到 ${CONFIG_FILE}.bak"
+    rm -f "${CONFIG_FILE}"
     
     # 备份并删除日志文件
     if [ -f "${LOG_FILE}" ]; then
@@ -265,99 +336,165 @@ uninstall_snell() {
         echo "已备份日志文件到 ${LOG_FILE}.bak"
         rm -f "${LOG_FILE}"
     fi
+
+    systemctl daemon-reload
     
-    echo "Snell 已成功卸载"
+    echo "实例 '${INSTANCE_NAME}' 已成功卸载"
+
+    # 检查是否还有其他实例
+    REMAINING_INSTANCES=$(find_instances)
+    if [ -z "$REMAINING_INSTANCES" ]; then
+        read -p "所有实例都已卸载。是否要删除 snell-server 程序和 systemd 模板? (y/n): " cleanup_confirm
+        if [ "$cleanup_confirm" = "y" ] || [ "$cleanup_confirm" = "Y" ]; then
+            rm -f "${INSTALL_DIR}/snell-server"
+            rm -f "${SYSTEMD_TEMPLATE_SERVICE}"
+            rm -rf "${CONFIG_DIR}"
+            rm -rf "${LOG_DIR}"
+            systemctl daemon-reload
+            echo "snell-server 和相关文件已清理。"
+        fi
+    fi
+
+    read -p "按任意键返回主菜单..." key
+}
+
+# 重启 Snell 实例
+restart_snell() {
+    list_instances
+    if [ $? -ne 0 ]; then
+        read -p "按任意键返回主菜单..." key
+        return
+    fi
+
+    read -p "请输入要重启的实例名称: " INSTANCE_NAME
+    if [ -z "$INSTANCE_NAME" ]; then
+        echo "实例名称不能为空。"
+        read -p "按任意键返回主菜单..." key
+        return
+    fi
+    
+    CONFIG_FILE="${CONFIG_DIR}/${INSTANCE_NAME}.conf"
+
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "错误: 实例 '${INSTANCE_NAME}' 不存在。"
+        read -p "按任意键返回主菜单..." key
+        return
+    fi
+
+    echo "正在重启实例 '${INSTANCE_NAME}'..."
+    if systemctl restart "snell@${INSTANCE_NAME}"; then
+        echo "实例 '${INSTANCE_NAME}' 重启成功。"
+    else
+        echo "错误: 实例 '${INSTANCE_NAME}' 重启失败。请检查日志。"
+    fi
+    
     read -p "按任意键返回主菜单..." key
 }
 
 # 查看配置
 view_config() {
+    list_instances
+    if [ $? -ne 0 ]; then
+        read -p "按任意键返回主菜单..." key
+        return
+    fi
+
+    read -p "请输入要查看配置的实例名称: " INSTANCE_NAME
+    if [ -z "$INSTANCE_NAME" ]; then
+        echo "实例名称不能为空。"
+        read -p "按任意键返回主菜单..." key
+        return
+    fi
+    
+    CONFIG_FILE="${CONFIG_DIR}/${INSTANCE_NAME}.conf"
+
     if [ -f "${CONFIG_FILE}" ]; then
-        echo "===== Snell 配置信息 ====="
+        echo "===== 实例 '${INSTANCE_NAME}' 配置信息 ====="
         echo "配置文件路径: ${CONFIG_FILE}"
         echo "配置内容:"
         cat "${CONFIG_FILE}"
         
-        # 提取关键信息
-        PORT=$(grep -oP "listen = 0.0.0.0:\K[0-9]+" ${CONFIG_FILE})
-        PSK=$(grep -oP "psk = \K[a-z0-9]+" ${CONFIG_FILE})
-        IPV6=$(grep -oP "ipv6 = \K(true|false)" ${CONFIG_FILE})
+        PORT=$(grep -oP 'listen\s*=\s*0\.0\.0\.0:\K[0-9]+' ${CONFIG_FILE})
+        PSK=$(grep -oP 'psk\s*=\s*\K\S+' ${CONFIG_FILE})
         
         echo ""
         echo "===== 配置摘要 ====="
         echo "端口: ${PORT:-未配置}"
         echo "PSK: ${PSK:-未配置}"
-        echo "IPv6: ${IPV6:-未配置}"
         
-        # 为 Surge 等客户端提供快速配置格式
         echo ""
         echo "===== 客户端配置参考 ====="
         SERVER_IP=$(ip -4 addr | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v "127.0.0.1" | head -n 1)
         echo "Surge/Shadowrocket 配置:"
         echo "[Proxy]"
-        echo "Snell = snell, ${SERVER_IP:-<服务器IP>}, ${PORT:-<端口>}, psk=${PSK:-<密钥>}, version=4, reuse=true, block-quic=on"
+        echo "${INSTANCE_NAME} = snell, ${SERVER_IP:-<服务器IP>}, ${PORT:-<端口>}, psk=${PSK:-<密钥>}, version=4, reuse=true, block-quic=on"
     else
-        echo "未找到 Snell 配置文件：${CONFIG_FILE}"
+        echo "未找到实例 '${INSTANCE_NAME}' 的配置文件。"
     fi
     
     echo ""
     read -p "按任意键返回主菜单..." key
 }
 
-# 安装脚本到系统路径并创建别名
-install_shortcut() {
-    # 将脚本复制到系统路径
-    SCRIPT_PATH="/usr/local/bin/snell-manager.sh"
-    cp "$0" "$SCRIPT_PATH"
-    chmod +x "$SCRIPT_PATH"
-    
-    # 判断当前使用的是 bash 还是 zsh
-    SHELL_TYPE="$(basename "$SHELL")"
-    RC_FILE=""
-    
-    if [ "$SHELL_TYPE" = "zsh" ]; then
-        RC_FILE="$HOME/.zshrc"
-    else
-        RC_FILE="$HOME/.bashrc"
+# 修改实例配置
+edit_config() {
+    # 检查 nano 是否已安装
+    if ! command -v nano &> /dev/null; then
+        echo "错误: nano 编辑器未安装。"
+        read -p "是否尝试自动安装 nano? (y/n): " install_confirm
+        if [ "$install_confirm" = "y" ] || [ "$install_confirm" = "Y" ]; then
+            if [ -x "$(command -v apt-get)" ]; then
+                apt-get update && apt-get install -y nano
+            elif [ -x "$(command -v yum)" ]; then
+                yum install -y nano
+            else
+                echo "无法自动安装 nano，请手动安装后重试。"
+                read -p "按任意键返回主菜单..." key
+                return
+            fi
+        else
+            echo "操作已取消。"
+            read -p "按任意键返回主菜单..." key
+            return
+        fi
+    fi
+
+    list_instances
+    if [ $? -ne 0 ]; then
+        read -p "按任意键返回主菜单..." key
+        return
+    fi
+
+    read -p "请输入要修改配置的实例名称: " INSTANCE_NAME
+    if [ -z "$INSTANCE_NAME" ]; then
+        echo "实例名称不能为空。"
+        read -p "按任意键返回主菜单..." key
+        return
     fi
     
-    # 检查别名是否已存在
-    if ! grep -q "alias s=" "$RC_FILE"; then
-        echo 'alias s="sudo /usr/local/bin/snell-manager.sh"' >> "$RC_FILE"
-        echo "已添加别名 's' 到 $RC_FILE"
-        echo "请运行 'source $RC_FILE' 或重新打开终端以激活别名"
-    else
-        echo "别名 's' 已存在于 $RC_FILE 中"
+    CONFIG_FILE="${CONFIG_DIR}/${INSTANCE_NAME}.conf"
+
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "错误: 实例 '${INSTANCE_NAME}' 的配置文件不存在。"
+        read -p "按任意键返回主菜单..." key
+        return
     fi
-    
-    echo "现在您可以使用 's' 命令来运行此脚本"
+
+    nano "${CONFIG_FILE}"
+
+    read -p "配置已修改。是否需要重启实例 '${INSTANCE_NAME}' 使配置生效? (y/n): " restart_confirm
+    if [ "$restart_confirm" = "y" ] || [ "$restart_confirm" = "Y" ]; then
+        echo "正在重启实例 '${INSTANCE_NAME}'..."
+        if systemctl restart "snell@${INSTANCE_NAME}"; then
+            echo "实例 '${INSTANCE_NAME}' 重启成功。"
+        else
+            echo "错误: 实例 '${INSTANCE_NAME}' 重启失败。请检查日志。"
+        fi
+    fi
+
     read -p "按任意键返回主菜单..." key
 }
 
-# 处理命令行参数
-if [ $# -ge 1 ]; then
-    case "$1" in
-        "status" | "1")
-            check_status
-            exit 0
-            ;;
-        "install" | "2")
-            install_snell
-            exit 0
-            ;;
-        "uninstall" | "3")
-            uninstall_snell
-            exit 0
-            ;;
-        "config" | "4")
-            view_config
-            exit 0
-            ;;
-        *)
-            # 无效参数，显示菜单
-            ;;
-    esac
-fi
 
 # 主程序
 while true; do
@@ -373,10 +510,17 @@ while true; do
             uninstall_snell
             ;;
         4)
-            view_config
+            restart_snell
             ;;
         5)
-            install_shortcut
+            view_config
+            ;;
+        6)
+            edit_config
+            ;;
+        7)
+            update_snell_binary
+            read -p "按任意键返回主菜单..." key
             ;;
         0)
             echo "感谢使用 Snell 管理脚本，再见！"
