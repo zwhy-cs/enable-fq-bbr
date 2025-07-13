@@ -26,14 +26,18 @@ find_instances() {
 # 列出实例
 list_instances() {
     echo "当前 Snell 实例:"
-    INSTANCES=$(find_instances)
-    if [ -z "$INSTANCES" ]; then
+    mapfile -t instances < <(find_instances)
+
+    if [ ${#instances[@]} -eq 0 ]; then
         echo "未找到任何实例。"
         return 1
     fi
-    for INSTANCE in $INSTANCES; do
-        echo " - $INSTANCE"
+
+    for i in "${!instances[@]}"; do
+        echo " $((i+1)). ${instances[i]}"
     done
+    echo ""
+    return 0
 }
 
 
@@ -286,18 +290,39 @@ EOF
 
 # 卸载 Snell
 uninstall_snell() {
-    list_instances
-    if [ $? -ne 0 ]; then
+    mapfile -t instances < <(find_instances)
+    if [ ${#instances[@]} -eq 0 ]; then
+        echo "未找到任何实例。"
         read -p "按任意键返回主菜单..." key
         return
     fi
 
-    read -p "请输入要卸载的实例名称: " INSTANCE_NAME
-    if [ -z "$INSTANCE_NAME" ]; then
-        echo "实例名称不能为空。"
+    echo "当前 Snell 实例:"
+    for i in "${!instances[@]}"; do
+        echo " $((i+1)). ${instances[i]}"
+    done
+    echo ""
+
+    read -p "请输入要卸载的实例序号 (输入 0 返回): " choice
+    if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
+        echo "无效输入，请输入一个数字。"
         read -p "按任意键返回主菜单..." key
         return
     fi
+
+    if [ "$choice" -eq 0 ]; then
+        return
+    fi
+
+    local index=$((choice-1))
+
+    if [ "$index" -lt 0 ] || [ "$index" -ge ${#instances[@]} ]; then
+        echo "错误: 无效的序号。"
+        read -p "按任意键返回主菜单..." key
+        return
+    fi
+
+    local INSTANCE_NAME=${instances[$index]}
     
     CONFIG_FILE="${CONFIG_DIR}/${INSTANCE_NAME}.conf"
     LOG_FILE="${LOG_DIR}/${INSTANCE_NAME}.log"
@@ -361,18 +386,39 @@ uninstall_snell() {
 
 # 重启 Snell 实例
 restart_snell() {
-    list_instances
-    if [ $? -ne 0 ]; then
+    mapfile -t instances < <(find_instances)
+    if [ ${#instances[@]} -eq 0 ]; then
+        echo "未找到任何实例。"
         read -p "按任意键返回主菜单..." key
         return
     fi
 
-    read -p "请输入要重启的实例名称: " INSTANCE_NAME
-    if [ -z "$INSTANCE_NAME" ]; then
-        echo "实例名称不能为空。"
+    echo "当前 Snell 实例:"
+    for i in "${!instances[@]}"; do
+        echo " $((i+1)). ${instances[i]}"
+    done
+    echo ""
+
+    read -p "请输入要重启的实例序号 (输入 0 返回): " choice
+    if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
+        echo "无效输入，请输入一个数字。"
         read -p "按任意键返回主菜单..." key
         return
     fi
+
+    if [ "$choice" -eq 0 ]; then
+        return
+    fi
+
+    local index=$((choice-1))
+
+    if [ "$index" -lt 0 ] || [ "$index" -ge ${#instances[@]} ]; then
+        echo "错误: 无效的序号。"
+        read -p "按任意键返回主菜单..." key
+        return
+    fi
+
+    local INSTANCE_NAME=${instances[$index]}
     
     CONFIG_FILE="${CONFIG_DIR}/${INSTANCE_NAME}.conf"
 
@@ -394,18 +440,39 @@ restart_snell() {
 
 # 查看配置
 view_config() {
-    list_instances
-    if [ $? -ne 0 ]; then
+    mapfile -t instances < <(find_instances)
+    if [ ${#instances[@]} -eq 0 ]; then
+        echo "未找到任何实例。"
         read -p "按任意键返回主菜单..." key
         return
     fi
 
-    read -p "请输入要查看配置的实例名称: " INSTANCE_NAME
-    if [ -z "$INSTANCE_NAME" ]; then
-        echo "实例名称不能为空。"
+    echo "当前 Snell 实例:"
+    for i in "${!instances[@]}"; do
+        echo " $((i+1)). ${instances[i]}"
+    done
+    echo ""
+
+    read -p "请输入要查看配置的实例序号 (输入 0 返回): " choice
+    if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
+        echo "无效输入，请输入一个数字。"
         read -p "按任意键返回主菜单..." key
         return
     fi
+
+    if [ "$choice" -eq 0 ]; then
+        return
+    fi
+
+    local index=$((choice-1))
+
+    if [ "$index" -lt 0 ] || [ "$index" -ge ${#instances[@]} ]; then
+        echo "错误: 无效的序号。"
+        read -p "按任意键返回主菜单..." key
+        return
+    fi
+
+    local INSTANCE_NAME=${instances[$index]}
     
     CONFIG_FILE="${CONFIG_DIR}/${INSTANCE_NAME}.conf"
 
@@ -460,18 +527,39 @@ edit_config() {
         fi
     fi
 
-    list_instances
-    if [ $? -ne 0 ]; then
+    mapfile -t instances < <(find_instances)
+    if [ ${#instances[@]} -eq 0 ]; then
+        echo "未找到任何实例。"
         read -p "按任意键返回主菜单..." key
         return
     fi
 
-    read -p "请输入要修改配置的实例名称: " INSTANCE_NAME
-    if [ -z "$INSTANCE_NAME" ]; then
-        echo "实例名称不能为空。"
+    echo "当前 Snell 实例:"
+    for i in "${!instances[@]}"; do
+        echo " $((i+1)). ${instances[i]}"
+    done
+    echo ""
+
+    read -p "请输入要修改配置的实例序号 (输入 0 返回): " choice
+    if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
+        echo "无效输入，请输入一个数字。"
         read -p "按任意键返回主菜单..." key
         return
     fi
+
+    if [ "$choice" -eq 0 ]; then
+        return
+    fi
+
+    local index=$((choice-1))
+
+    if [ "$index" -lt 0 ] || [ "$index" -ge ${#instances[@]} ]; then
+        echo "错误: 无效的序号。"
+        read -p "按任意键返回主菜单..." key
+        return
+    fi
+
+    local INSTANCE_NAME=${instances[$index]}
     
     CONFIG_FILE="${CONFIG_DIR}/${INSTANCE_NAME}.conf"
 
