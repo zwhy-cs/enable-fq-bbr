@@ -142,13 +142,13 @@ fi
 cat <<EOF > /etc/sysctl.conf
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
-net.ipv4.tcp_wmem = 4096 16384 20000000
-net.ipv4.tcp_rmem = 4096 87380 20000000
+net.ipv4.tcp_wmem = 4096 16384 50000000
+net.ipv4.tcp_rmem = 4096 87380 50000000
 net.ipv6.conf.all.disable_ipv6 = 1
 net.ipv6.conf.default.disable_ipv6 = 1
 net.ipv6.conf.lo.disable_ipv6 = 1
-net.core.rmem_max = 20000000
-net.core.wmem_max = 20000000
+net.core.rmem_max = 50000000
+net.core.wmem_max = 50000000
 EOF
 
 # 使 sysctl 配置生效
