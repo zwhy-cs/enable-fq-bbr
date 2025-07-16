@@ -47,85 +47,37 @@ EOF
   fi
 fi
 
-#############################################################
-# 修改 APT 源为官方源（自动检测 Debian 版本） #
-#############################################################
-echo "开始修改 APT 源为官方源..."
-
-# 检测当前 Debian 版本
-if [ -f /etc/os-release ]; then
-  source /etc/os-release
-  DEBIAN_VERSION=$VERSION_CODENAME
-  # 如果无法直接获取代号，尝试从版本号推断
-  if [ -z "$DEBIAN_VERSION" ] && [ -n "$VERSION_ID" ]; then
-    case "$VERSION_ID" in
-      "9"*) DEBIAN_VERSION="stretch" ;;
-      "10"*) DEBIAN_VERSION="buster" ;;
-      "11"*) DEBIAN_VERSION="bullseye" ;;
-      "12"*) DEBIAN_VERSION="bookworm" ;;
-      "13"*) DEBIAN_VERSION="trixie" ;;
-      *) DEBIAN_VERSION="" ;;
-    esac
-  fi
-fi
-
-# 如果仍然无法确定版本，使用lsb_release命令
-if [ -z "$DEBIAN_VERSION" ] && command -v lsb_release > /dev/null; then
-  DEBIAN_VERSION=$(lsb_release -cs)
-fi
-
-# 如果还是无法确定版本，要求用户输入
-if [ -z "$DEBIAN_VERSION" ]; then
-  echo "无法自动检测 Debian 版本，请手动输入（如 bullseye, bookworm 等）:"
-  read -r DEBIAN_VERSION
-fi
-
-echo "检测到 Debian 版本: $DEBIAN_VERSION"
+##########################################
+# 修改 APT 源为 Debian 11 (bullseye) #
+##########################################
+echo "开始修改 APT 源为 Debian 11 (bullseye) 官方源..."
 
 # 备份原有 sources.list 文件
 cp /etc/apt/sources.list /etc/apt/sources.list.bak
 
-# 根据检测到的版本写入官方源内容
+# 写入 Debian 11 (bullseye) 的官方源
 cat <<EOF > /etc/apt/sources.list
-# Debian $DEBIAN_VERSION 官方源
-# 官方主仓库
-deb http://deb.debian.org/debian $DEBIAN_VERSION main contrib non-free
-deb-src http://deb.debian.org/debian $DEBIAN_VERSION main contrib non-free
+# Debian bullseye 官方源
+deb http://deb.debian.org/debian bullseye main contrib non-free
+deb-src http://deb.debian.org/debian bullseye main contrib non-free
 
-# 官方安全更新仓库
+# 安全更新
+deb http://security.debian.org/debian-security bullseye-security main contrib non-free
+deb-src http://security.debian.org/debian-security bullseye-security main contrib non-free
+
+# 更新
+deb http://deb.debian.org/debian bullseye-updates main contrib non-free
+deb-src http://deb.debian.org/debian bullseye-updates main contrib non-free
+
+# 回溯仓库
+deb http://deb.debian.org/debian bullseye-backports main contrib non-free
+deb-src http://deb.debian.org/debian bullseye-backports main contrib non-free
 EOF
 
-# 根据不同版本调整安全更新源的URL格式
-if [[ "$DEBIAN_VERSION" == "bookworm" || "$DEBIAN_VERSION" == "trixie" ]]; then
-  # Debian 12及以上版本使用新的安全更新源格式
-  cat <<EOF >> /etc/apt/sources.list
-deb http://security.debian.org/debian-security $DEBIAN_VERSION-security main contrib non-free
-deb-src http://security.debian.org/debian-security $DEBIAN_VERSION-security main contrib non-free
-EOF
-else
-  # Debian 11及以下版本使用旧的安全更新源格式
-  cat <<EOF >> /etc/apt/sources.list
-deb http://security.debian.org/debian-security $DEBIAN_VERSION-security main contrib non-free
-deb-src http://security.debian.org/debian-security $DEBIAN_VERSION-security main contrib non-free
-EOF
-fi
+echo "APT 源已修改为 Debian 11 (bullseye) 官方源，备份文件在 /etc/apt/sources.list.bak"
 
-# 继续添加更新和回溯仓库
-cat <<EOF >> /etc/apt/sources.list
-# 官方更新仓库
-deb http://deb.debian.org/debian $DEBIAN_VERSION-updates main contrib non-free
-deb-src http://deb.debian.org/debian $DEBIAN_VERSION-updates main contrib non-free
-
-# 官方回溯仓库（如需要最新软件包，但可能稳定性略低）
-deb http://deb.debian.org/debian $DEBIAN_VERSION-backports main contrib non-free
-deb-src http://deb.debian.org/debian $DEBIAN_VERSION-backports main contrib non-free
-EOF
-
-echo "APT 源已修改为官方源（版本: $DEBIAN_VERSION），备份文件在 /etc/apt/sources.list.bak"
-
-# 脚本的其余部分保持不变...
-
-
+# 更新软件包列表
+apt-get update
 
 ##############################
 # 修改 sysctl 配置（fq、bbr） #
