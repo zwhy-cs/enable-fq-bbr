@@ -126,7 +126,7 @@ add_reality_node() {
         "decryption": "none"
       },
       "streamSettings": {
-        "network": "raw",
+        "network": "tcp",
         "security": "reality",
         "realitySettings": {
           "dest": "$DEST",
