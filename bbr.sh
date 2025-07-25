@@ -47,37 +47,6 @@ EOF
   fi
 fi
 
-##########################################
-# 修改 APT 源为 Debian 11 (bullseye) #
-##########################################
-echo "开始修改 APT 源为 Debian 11 (bullseye) 官方源..."
-
-# 备份原有 sources.list 文件
-cp /etc/apt/sources.list /etc/apt/sources.list.bak
-
-# 写入 Debian 11 (bullseye) 的官方源
-cat <<EOF > /etc/apt/sources.list
-# Debian bullseye 官方源
-deb http://deb.debian.org/debian bullseye main contrib non-free
-deb-src http://deb.debian.org/debian bullseye main contrib non-free
-
-# 安全更新
-deb http://security.debian.org/debian-security bullseye-security main contrib non-free
-deb-src http://security.debian.org/debian-security bullseye-security main contrib non-free
-
-# 更新
-deb http://deb.debian.org/debian bullseye-updates main contrib non-free
-deb-src http://deb.debian.org/debian bullseye-updates main contrib non-free
-
-# 回溯仓库
-deb http://deb.debian.org/debian bullseye-backports main contrib non-free
-EOF
-
-echo "APT 源已修改为 Debian 11 (bullseye) 官方源，备份文件在 /etc/apt/sources.list.bak"
-
-# 更新软件包列表
-apt-get update
-
 ##############################
 # 修改 sysctl 配置（fq、bbr） #
 ##############################
