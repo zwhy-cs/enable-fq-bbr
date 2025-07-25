@@ -71,7 +71,6 @@ deb-src http://deb.debian.org/debian bullseye-updates main contrib non-free
 
 # 回溯仓库
 deb http://deb.debian.org/debian bullseye-backports main contrib non-free
-deb-src http://deb.debian.org/debian bullseye-backports main contrib non-free
 EOF
 
 echo "APT 源已修改为 Debian 11 (bullseye) 官方源，备份文件在 /etc/apt/sources.list.bak"
