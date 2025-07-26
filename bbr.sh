@@ -109,4 +109,10 @@ else
   echo "未检测到 SSH 密码登录启用，SSH 端口保持默认设置。"
 fi
 
+wget -O /root/tcping.tar.gz \
+  https://github.com/pouriyajamshidi/tcping/releases/download/v2.7.1/tcping-linux-amd64-static.tar.gz
+cd /root
+tar -xzf tcping.tar.gz
+mv tcping /usr/local/bin/
+chmod +x /usr/local/bin/tcping
 echo "所有操作执行完毕！"
