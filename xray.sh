@@ -108,6 +108,17 @@ add_reality_node() {
     read -p "请输入服务器名称 (一般与目标网站域名相同): " SERVER_NAME
     SERVER_NAME=${SERVER_NAME:-"www.microsoft.com"}
 
+    read -p "是否添加回落限速? [y/n, 默认: y]: " ADD_LIMIT
+    ADD_LIMIT=${ADD_LIMIT:-"y"}
+
+    local upload_bps=65536
+    local download_bps=262144
+    if [[ "$ADD_LIMIT" != "y" && "$ADD_LIMIT" != "Y" ]]; then
+        upload_bps=0
+        download_bps=0
+        info "已禁用回落限速"
+    fi
+
     # 读取现有配置
     CURRENT_CONFIG=$(cat /usr/local/etc/xray/config.json)
     
@@ -141,12 +152,12 @@ add_reality_node() {
           ],
           "limitFallbackUpload": {
             "afterBytes": 0,
-            "bytesPerSec": 65536,
+            "bytesPerSec": $upload_bps,
             "burstBytesPerSec": 0
           },
           "limitFallbackDownload": {
             "afterBytes": 10485760,
-            "bytesPerSec": 262144,
+            "bytesPerSec": $download_bps,
             "burstBytesPerSec": 2097152
           }
         }
