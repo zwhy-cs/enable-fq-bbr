@@ -45,13 +45,13 @@ list_instances() {
 show_menu() {
     clear
     echo "========== Snell 多实例管理脚本 =========="
-    echo "1. 查看所有 Snell 实例状态"
-    echo "2. 安装新 Snell 实例"
-    echo "3. 卸载 Snell 实例"
-    echo "4. 重启 Snell 实例"
-    echo "5. 查看实例配置"
-    echo "6. 修改实例配置 (nano)"
-    echo "7. 更新 snell-server 程序"
+    echo "1. 安装/更新 Snell 程序"
+    echo "2. 查看所有 Snell 实例状态"
+    echo "3. 安装新 Snell 实例"
+    echo "4. 卸载 Snell 实例"
+    echo "5. 重启 Snell 实例"
+    echo "6. 查看实例配置"
+    echo "7. 修改实例配置 (nano)"
     echo "0. 退出脚本"
     echo "======================================"
     echo ""
@@ -182,7 +182,7 @@ update_snell_binary() {
 # 安装 Snell
 install_snell() {
     if ! is_snell_installed; then
-        echo "未找到 snell-server 程序。请先使用菜单选项 7 更新/安装 snell-server。"
+        echo "未找到 snell-server 程序。请先使用菜单选项 1 更新/安装 snell-server。"
         read -p "按任意键返回主菜单..." key
         return
     fi
@@ -590,26 +590,26 @@ while true; do
     show_menu
     case $choice in
         1)
-            check_status
-            ;;
-        2)
-            install_snell
-            ;;
-        3)
-            uninstall_snell
-            ;;
-        4)
-            restart_snell
-            ;;
-        5)
-            view_config
-            ;;
-        6)
-            edit_config
-            ;;
-        7)
             update_snell_binary
             read -p "按任意键返回主菜单..." key
+            ;;
+        2)
+            check_status
+            ;;
+        3)
+            install_snell
+            ;;
+        4)
+            uninstall_snell
+            ;;
+        5)
+            restart_snell
+            ;;
+        6)
+            view_config
+            ;;
+        7)
+            edit_config
             ;;
         0)
             echo "感谢使用 Snell 管理脚本，再见！"
