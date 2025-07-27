@@ -128,7 +128,7 @@ EOF
 }
 EOF
 
-    创建 custom_outbound.json
+    # 创建 custom_outbound.json
    cat > /etc/V2bX/custom_outbound.json <<EOF
 [
 ]
