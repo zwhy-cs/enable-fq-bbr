@@ -18,14 +18,6 @@ EOF
 ##############################
 # 修改 sysctl 配置（fq、bbr） #
 ##############################
-echo "开始修改 sysctl 配置..."
-# 备份原有 sysctl 配置文件
-if [ -f /etc/sysctl.conf ]; then
-  cp /etc/sysctl.conf /etc/sysctl.conf.bak
-else
-  touch /etc/sysctl.conf
-fi
-
 # 直接覆盖 sysctl.conf 内容
 cat <<EOF > /etc/sysctl.conf
 net.core.default_qdisc = fq
