@@ -9,6 +9,8 @@ apt-get update && apt-get install -y iperf3 unzip wget python3 nano
 #####################
 echo "开始修改 DNS 配置..."
 cat <<EOF > /etc/resolv.conf
+nameserver 94.140.14.140
+nameserver 94.140.14.141
 nameserver 1.1.1.1
 nameserver 8.8.8.8
 EOF
