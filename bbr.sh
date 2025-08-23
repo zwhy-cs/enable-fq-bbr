@@ -2,7 +2,7 @@
 # 安装必要软件包（使用 apt-get 安装） #
 ##########################################
 echo "开始安装必要的软件包..."
-apt-get update && apt-get install -y iperf3 unzip wget python3 nano
+apt-get update && apt-get install -y iperf3 unzip wget python3 nano dnsutils
 
 #####################
 # 修改 DNS 配置部分 #
