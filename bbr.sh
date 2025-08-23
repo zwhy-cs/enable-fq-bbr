@@ -2,16 +2,23 @@
 # 安装必要软件包（使用 apt-get 安装） #
 ##########################################
 echo "开始安装必要的软件包..."
-apt-get update && apt-get install -y iperf3 unzip wget python3 nano dnsutils
+apt-get update && apt-get install -y iperf3 unzip wget python3 nano dnsutils e2fsprogs
 
 #####################
 # 修改 DNS 配置部分 #
 #####################
 echo "开始修改 DNS 配置..."
+# 先解锁并处理可能的符号链接
+chattr -i /etc/resolv.conf >/dev/null 2>&1 || true
+if [ -L /etc/resolv.conf ]; then
+    rm -f /etc/resolv.conf
+fi
 cat <<EOF > /etc/resolv.conf
 nameserver 1.1.1.1
 nameserver 8.8.8.8
 EOF
+# 写入后上锁，防止被修改
+chattr +i /etc/resolv.conf || true
 
 ##############################
 # 修改 sysctl 配置（fq、bbr） #
