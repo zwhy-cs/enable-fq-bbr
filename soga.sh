@@ -261,8 +261,6 @@ install_soga() {
   mkdir -p "$SOGA_DIR/$service_name"
   COMPOSE_FILE="$SOGA_DIR/$service_name/docker-compose.yml"
   cat > "$COMPOSE_FILE" << EOF
-version: "3.3"
-
 services:
   soga:
     image: vaxilu/soga:${soga_version}
