@@ -280,6 +280,7 @@ services:
       - log_level=debug
       - default_dns=94.140.14.140,94.140.14.141,1.1.1.1,8.8.8.8
       - dns_strategy=ipv4_first
+      - auto_update=true
 EOF
 
   echo "配置文件已生成：$COMPOSE_FILE"
