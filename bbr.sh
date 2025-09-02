@@ -1,6 +1,16 @@
 ##########################################
 # 安装必要软件包（使用 apt-get 安装） #
 ##########################################
+cat <<EOF > /etc/apt/sources.list
+# deb http://deb.debian.org/debian bullseye main
+
+deb http://deb.debian.org/debian bullseye main non-free contrib
+# deb-src http://deb.debian.org/debian bullseye main non-free contrib
+
+deb http://security.debian.org/debian-security bullseye-security main contrib non-free
+# deb-src http://security.debian.org/debian-security bullseye-security main contrib non-free
+EOF
+
 echo "开始安装必要的软件包..."
 apt update && apt install -y iperf3 unzip wget python3 nano dnsutils e2fsprogs
 
