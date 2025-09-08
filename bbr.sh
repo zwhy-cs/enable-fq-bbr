@@ -14,7 +14,7 @@ if [ -L /etc/resolv.conf ]; then
     rm -f /etc/resolv.conf
 fi
 cat <<EOF > /etc/resolv.conf
-nameserver 8.8.8.8
+nameserver 94.140.14.140
 nameserver 1.1.1.1
 EOF
 # 写入后上锁，防止被修改
