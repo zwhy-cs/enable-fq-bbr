@@ -95,18 +95,18 @@ install_v2bx() {
 			},
 			"AssetPath": "",
 			"DnsConfigPath": "/etc/V2bX/dns.json",
-			"RouteConfigPath": "/etc/V2bX/route.json",
+			"RouteConfigPath": "",
 			"ConnectionConfig": {
 				"handshake": 4,
 				"connIdle": 300,
 				"uplinkOnly": 2,
 				"downlinkOnly": 5,
-				"statsUserUplink": true,
-				"statsUserDownlink": true,
+				"statsUserUplink": false,
+				"statsUserDownlink": false,
 				"bufferSize": 4
 			},
-			"InboundConfigPath": "/etc/V2bX/custom_inbound.json",
-			"OutboundConfigPath": "/etc/V2bX/custom_outbound.json"
+			"InboundConfigPath": "",
+			"OutboundConfigPath": ""
 		}
 	],
 	"Nodes": []
@@ -121,8 +121,8 @@ EOF
 {
   "dns": {
     "servers": [
-      "1.1.1.1",
-      "8.8.8.8"
+      "94.140.14.140",
+      "1.1.1.1"
     ]
   }
 }
