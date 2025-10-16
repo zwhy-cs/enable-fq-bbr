@@ -278,9 +278,8 @@ services:
       - node_id=
       - forbidden_bit_torrent=false
       - log_level=debug
-      - default_dns=94.140.14.140
+      - default_dns=94.140.14.140,94.140.14.141
       - dns_strategy=ipv4_first
-      - auto_update=true
 EOF
 
   echo "配置文件已生成：$COMPOSE_FILE"
