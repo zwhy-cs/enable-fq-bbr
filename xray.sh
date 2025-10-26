@@ -95,8 +95,8 @@ add_reality_node() {
     
     UUID=$(xray uuid)
     KEY_PAIR=$(xray x25519)
-    PRIVATE_KEY=$(echo "$KEY_PAIR" | grep "PrivateKey" | awk '{print $3}')
-    PUBLIC_KEY=$(echo "$KEY_PAIR" | grep "Hash32" | awk '{print $3}')
+    PRIVATE_KEY=$(echo "$KEY_PAIR" | grep "PrivateKey" | awk '{print $2}')
+    PUBLIC_KEY=$(echo "$KEY_PAIR" | grep "Hash32" | awk '{print $2}')
     
     # 询问用户输入
     read -p "请输入监听端口 [默认: 443]: " PORT
