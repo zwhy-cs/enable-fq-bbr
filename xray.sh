@@ -516,6 +516,10 @@ view_config() {
     echo ""
 }
 
+nano_config() {
+    nano /usr/local/etc/xray/config.json
+}
+
 # 检查Xray状态
 check_status() {
     echo ""
@@ -534,10 +538,11 @@ show_menu() {
     echo "4. 卸载Xray"
     echo "5. 查看Xray状态"
     echo "6. 查看Xray配置"
-    echo "7. 查看所有节点"
-    echo "8. 删除指定节点"
-    echo "9. 重启Xray服务"
-    echo "10. 更新Xray"
+    echo "7. 修改Xray配置"
+    echo "8. 查看所有节点"
+    echo "9. 删除指定节点"
+    echo "10. 重启Xray服务"
+    echo "11. 更新Xray"
     echo "0. 退出脚本"
     echo "----------------------"
     read -p "请输入选项 [0-10]: " option
@@ -568,17 +573,20 @@ show_menu() {
             view_config
             ;;
         7)
-            list_nodes
+            nano_config
             ;;
         8)
-            check_root
-            delete_node_by_port
+            list_nodes
             ;;
         9)
             check_root
-            restart_xray
+            delete_node_by_port
             ;;
         10)
+            check_root
+            restart_xray
+            ;;
+        11)
             check_root
             update_xray
             ;;
