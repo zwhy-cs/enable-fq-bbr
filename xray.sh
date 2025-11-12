@@ -103,10 +103,8 @@ add_reality_node() {
     PORT=${PORT:-443}
     
     read -p "请输入目标网站 (需支持TLS1.3和h2，例如: www.microsoft.com:443): " DEST
-    DEST=${DEST:-"www.microsoft.com:443"}
-    
-    read -p "请输入服务器名称 (一般与目标网站域名相同): " SERVER_NAME
-    SERVER_NAME=${SERVER_NAME:-"www.microsoft.com"}
+    DEST=${DEST:-"www.microsoft.com"}
+    SERVER_NAME=DEST
 
     read -p "是否添加回落限速? [y/n, 默认: y]: " ADD_LIMIT
     ADD_LIMIT=${ADD_LIMIT:-"y"}
@@ -141,7 +139,7 @@ add_reality_node() {
         "security": "reality",
         "realitySettings": {
           "show": false,
-          "target": "$DEST",
+          "target": "$DEST:443",
           "xver": 0,
           "serverNames": [
             "$SERVER_NAME"
