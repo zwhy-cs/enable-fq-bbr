@@ -140,12 +140,15 @@ add_reality_node() {
         "network": "tcp",
         "security": "reality",
         "realitySettings": {
-          "dest": "$DEST",
+          "show": false,
+          "target": "$DEST",
+          "xver": 0,
           "serverNames": [
             "$SERVER_NAME"
           ],
           "privateKey": "$PRIVATE_KEY",
           "publicKey": "$PUBLIC_KEY",
+          "maxTimeDiff": 0,
           "shortIds": [
             "",
             "0123456789abcdef"
