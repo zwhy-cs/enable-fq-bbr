@@ -21,6 +21,12 @@ EOF
 chattr +i /etc/resolv.conf || true
 
 ##############################
+# 设置 IPv4 优先（gai.conf） #
+##############################
+sed -i 's/^#precedence ::ffff:0:0\/96  100/precedence ::ffff:0:0\/96  100/' /etc/gai.conf
+
+
+##############################
 # 修改 sysctl 配置（fq、bbr） #
 ##############################
 # 直接覆盖 sysctl.conf 内容
