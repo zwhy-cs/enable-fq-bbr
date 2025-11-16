@@ -14,8 +14,8 @@ if [ -L /etc/resolv.conf ]; then
     rm -f /etc/resolv.conf
 fi
 cat <<EOF > /etc/resolv.conf
-nameserver 1.1.1.1
-nameserver 1.0.0.1
+nameserver 8.8.8.8
+nameserver 8.8.4.4
 EOF
 # 写入后上锁，防止被修改
 chattr +i /etc/resolv.conf || true
@@ -37,8 +37,6 @@ net.ipv4.tcp_wmem = 4096 16384 20000000
 net.ipv4.tcp_rmem = 4096 87380 20000000
 net.core.rmem_max = 20000000
 net.core.wmem_max = 20000000
-net.ipv6.conf.all.disable_ipv6 = 1
-net.ipv6.conf.default.disable_ipv6 = 1
 EOF
 
 # 使 sysctl 配置生效
