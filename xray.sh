@@ -79,7 +79,7 @@ configure_xray() {
       "tag": "direct",
       "settings": {
         "domainStrategy": "UseIPv4v6"
-      },
+      }
     }
   ]
 }
