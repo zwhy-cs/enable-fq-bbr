@@ -72,18 +72,14 @@ configure_xray() {
   "log": {
     "loglevel": "debug"
   },
-  "dns": {
-    "servers": [
-      "8.8.8.8",
-      "8.8.4.4"
-    ],
-    "queryStrategy": "UseIPv4"
-  },
   "inbounds": [],
   "outbounds": [
     {
       "protocol": "freedom",
-      "tag": "direct"
+      "tag": "direct",
+      "settings": {
+        "domainStrategy": "UseIPv4v6"
+      },
     }
   ]
 }
