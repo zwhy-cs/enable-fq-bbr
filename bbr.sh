@@ -1,9 +1,3 @@
-##########################################
-# 安装必要软件包（使用 apt-get 安装） #
-##########################################
-echo "开始安装必要的软件包..."
-apt update && apt install -y iperf3 unzip wget python3 nano dnsutils
-
 #####################
 # 修改 DNS 配置部分 #
 #####################
@@ -26,6 +20,14 @@ chattr +i /etc/resolv.conf || true
 # 设置 IPv4 优先（gai.conf） #
 ##############################
 sed -i 's/^#precedence ::ffff:0:0\/96  100/precedence ::ffff:0:0\/96  100/' /etc/gai.conf
+
+
+##########################################
+# 安装必要软件包（使用 apt-get 安装） #
+##########################################
+echo "开始安装必要的软件包..."
+apt update && apt install -y iperf3 unzip wget python3 nano dnsutils
+
 
 
 ##############################
