@@ -278,7 +278,7 @@ services:
       - node_id=
       - forbidden_bit_torrent=false
       - log_level=debug
-      - default_dns=8.8.8.8,8.8.4.4,2001:4860:4860::8888,2001:4860:4860::8844
+      - default_dns=94.140.14.140,94.140.14.141,2a10:50c0::1:ff,2a10:50c0::2:ff
       - dns_strategy=ipv4_first
 EOF
 
