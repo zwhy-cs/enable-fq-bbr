@@ -8,10 +8,10 @@ if [ -L /etc/resolv.conf ]; then
     rm -f /etc/resolv.conf
 fi
 cat <<EOF > /etc/resolv.conf
-nameserver 94.140.14.140
-nameserver 94.140.14.141
-nameserver 2a10:50c0::1:ff
-nameserver 2a10:50c0::2:ff
+nameserver 8.8.8.8
+nameserver 8.8.4.4
+nameserver 2001:4860:4860:0:0:0:0:8888
+nameserver 2001:4860:4860:0:0:0:0:8844
 EOF
 # 写入后上锁，防止被修改
 chattr +i /etc/resolv.conf || true
