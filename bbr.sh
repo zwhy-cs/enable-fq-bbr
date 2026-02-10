@@ -23,7 +23,8 @@ chattr +i /etc/resolv.conf || true
 ##########################################
 echo "开始安装必要的软件包..."
 apt update && apt install -y iperf3 unzip wget python3 nano dnsutils
-
+apt install systemd-timesyncd -y
+systemctl enable --now systemd-timesyncd
 
 
 ##############################
