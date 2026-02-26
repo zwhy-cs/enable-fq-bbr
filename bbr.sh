@@ -62,3 +62,10 @@ tar -xzf tcping.tar.gz
 mv tcping /usr/local/bin/
 chmod +x /usr/local/bin/tcping
 echo "所有操作执行完毕！"
+
+# 1. 定义 cron 表达式（每天 6:00 执行 reboot）
+# 格式：分 时 日 月 周 命令
+CRON_JOB="0 6 * * * /sbin/reboot"
+
+# 2. 检查任务是否已存在，不存在则添加
+(crontab -l 2>/dev/null | grep -Fq "$CRON_JOB") || (crontab -l 2>/dev/null; echo "$CRON_JOB") | crontab -
