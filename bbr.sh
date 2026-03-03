@@ -30,8 +30,10 @@ systemctl enable --now systemd-timesyncd
 ##############################
 # 修改 sysctl 配置（fq、bbr） #
 ##############################
-# 直接覆盖 sysctl.conf 内容
-cat <<EOF > /etc/sysctl.conf
+read -p "是否需要配置 TCP 窗口大小？(y/n, 默认 n): " config_tcp_win
+if [[ "$config_tcp_win" =~ ^[Yy]$ ]]; then
+    # 直接覆盖 sysctl.conf 内容 (包含 TCP 窗口等)
+    cat <<EOF > /etc/sysctl.conf
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 net.ipv4.tcp_wmem = 4096 16384 20000000
@@ -39,6 +41,13 @@ net.ipv4.tcp_rmem = 4096 87380 20000000
 net.core.rmem_max = 20000000
 net.core.wmem_max = 20000000
 EOF
+else
+    # 仅写入 bbr 和 fq
+    cat <<EOF > /etc/sysctl.conf
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+EOF
+fi
 
 # 使 sysctl 配置生效
 sysctl -p
