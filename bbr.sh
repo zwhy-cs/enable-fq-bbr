@@ -98,9 +98,11 @@ mv tcping /usr/local/bin/
 chmod +x /usr/local/bin/tcping
 echo "所有操作执行完毕！"
 
-# 1. 定义 cron 表达式（每天 6:00 执行 reboot）
+# 1. 定义 cron 表达式（每天 6:00 执行 reboot 和 开机 30 秒执行 dog）
 # 格式：分 时 日 月 周 命令
-CRON_JOB="0 6 * * * /sbin/reboot"
+CRON_JOB_REBOOT="0 6 * * * /sbin/reboot"
+CRON_JOB_DOG="@reboot sleep 30 && echo \"0\" | /usr/local/bin/dog"
 
 # 2. 检查任务是否已存在，不存在则添加
-(crontab -l 2>/dev/null | grep -Fq "$CRON_JOB") || (crontab -l 2>/dev/null; echo "$CRON_JOB") | crontab -
+(crontab -l 2>/dev/null | grep -Fq "$CRON_JOB_REBOOT") || (crontab -l 2>/dev/null; echo "$CRON_JOB_REBOOT") | crontab -
+(crontab -l 2>/dev/null | grep -Fq "$CRON_JOB_DOG") || (crontab -l 2>/dev/null; echo "$CRON_JOB_DOG") | crontab -
