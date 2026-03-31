@@ -74,7 +74,7 @@ install_v2bx() {
     if ! command_exists v2bx; then
     	apt install -y jq 
         print_message "yellow" "未找到 v2bx。正在开始安装..."
-        wget -N https://raw.githubusercontent.com/wyx2685/V2bX-script/master/install.sh && bash install.sh
+        wget -N https://raw.githubusercontent.com/wyx2685/v2node/master/script/install.sh && bash install.sh
         
         # After installation, overwrite config.json with a minimal version
         if [ -f "$CONFIG_FILE" ]; then
