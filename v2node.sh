@@ -93,24 +93,42 @@ add_node() {
         setup_api || return 1
         load_api_info
     else
-        print_info "已提载 API 主机: $API_HOST"
+        print_info "已加载 API 主机: $API_HOST"
     fi
     
-    read -p "请输入要添加的节点 ID (NodeID): " node_id
-    if [[ -z "$node_id" ]]; then
+    read -p "请输入要添加的节点 ID (NodeID, 多个以空格或逗号分隔): " input_ids
+    if [[ -z "$input_ids" ]]; then
         print_error "NodeID 不能为空！"
         return 1
     fi
 
-    # 检查 NodeID 是否已存在
-    if jq -e ".Nodes[] | select(.NodeID == $node_id)" "$CONFIG_FILE" > /dev/null 2>&1; then
-        print_warn "警告: NodeID $node_id 已存在于配置中。"
-        read -p "是否继续添加？(y/n): " confirm
-        [[ "$confirm" != "y" ]] && return 0
+    # 替换逗号为空格，并按空格分割
+    local node_ids=$(echo "$input_ids" | tr ',' ' ')
+    local added_count=0
+
+    # 确保 config.json 存在且结构正确
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo '{"Log": {"Level": "warning", "Output": "", "Access": "none"}, "Nodes": []}' > "$CONFIG_FILE"
     fi
 
-    # 构建新节点 JSON (适配精简版结构)
-    new_node=$(cat <<EOF
+    for node_id in $node_ids; do
+        # 验证是否为纯数字
+        if ! [[ "$node_id" =~ ^[0-9]+$ ]]; then
+            print_error "无效的 NodeID: $node_id (必须为数字)，跳过。"
+            continue
+        fi
+
+        # 检查 NodeID 是否已存在
+        if jq -e ".Nodes[] | select(.NodeID == $node_id)" "$CONFIG_FILE" > /dev/null 2>&1; then
+            print_warn "警告: NodeID $node_id 已存在于配置中。"
+            read -p "是否重复添加该节点？(y/n): " confirm
+            [[ "$confirm" != "y" ]] && continue
+        fi
+
+        print_info "正在添加节点: $node_id ..."
+
+        # 构建新节点 JSON
+        new_node=$(cat <<EOF
 {
   "ApiHost": "$API_HOST",
   "NodeID": $node_id,
@@ -120,19 +138,21 @@ add_node() {
 EOF
 )
 
-    # 确保 config.json 存在且结构正确
-    if [ ! -f "$CONFIG_FILE" ]; then
-        echo '{"Log": {"Level": "warning", "Output": "", "Access": "none"}, "Nodes": []}' > "$CONFIG_FILE"
-    fi
+        # 使用 jq 追加到 Nodes 数组
+        tmp_json=$(jq ".Nodes += [$new_node]" "$CONFIG_FILE")
+        if [ $? -eq 0 ]; then
+            echo "$tmp_json" > "$CONFIG_FILE"
+            ((added_count++))
+        else
+            print_error "JSON 处理失败 ($node_id)，请检查 jq 工具或配置文件格式。"
+        fi
+    done
 
-    # 使用 jq 追加到 Nodes 数组
-    tmp_json=$(jq ".Nodes += [$new_node]" "$CONFIG_FILE")
-    if [ $? -eq 0 ]; then
-        echo "$tmp_json" > "$CONFIG_FILE"
-        print_info "节点 $node_id 已成功添加到 $CONFIG_FILE"
+    if [ $added_count -gt 0 ]; then
+        print_info "共成功添加了 $added_count 个节点。"
         restart_service
     else
-        print_error "JSON 处理失败，请检查 jq 工具或配置文件格式。"
+        print_warn "没有节点被添加。"
     fi
 }
 
