@@ -1,14 +1,15 @@
 #!/bin/bash
 
-# v2node 自动化安装与配置脚本 (初步版本)
+# v2node 自动化安装与配置脚本 (方案 B: 独立 API 存储版)
 
 CONFIG_FILE="/etc/v2node/config.json"
+API_INFO_FILE="/etc/v2node/api_info"
 
 # 颜色定义
-green="\032[32m"
-red="\032[31m"
-yellow="\032[33m"
-plain="\032[0m"
+green="\033[32m"
+red="\033[31m"
+yellow="\033[33m"
+plain="\033[0m"
 
 # 打印信息
 print_info() {
@@ -19,80 +20,172 @@ print_error() {
     echo -e "${red}[ERROR]${plain} $1"
 }
 
+print_warn() {
+    echo -e "${yellow}[WARN]${plain} $1"
+}
+
 # 检查 root 权限
 if [[ $EUID -ne 0 ]]; then
    print_error "此脚本必须以 root 身份运行！"
    exit 1
 fi
 
-# 1. 安装 v2node
+# 安装必要依赖
+install_dependencies() {
+    if ! command -v jq &> /dev/null; then
+        print_info "正在安装 jq (JSON 处理工具)..."
+        if command -v apt-get &> /dev/null; then
+            apt-get update && apt-get install -y jq
+        elif command -v yum &> /dev/null; then
+            yum install -y jq
+        else
+            print_error "未找到包管理器，请手动安装 jq。"
+            exit 1
+        fi
+    fi
+}
+
+# 1. 基础安装 v2node
 install_v2node() {
-    print_info "正在开始安装 v2node..."
+    print_info "正在开始安装 v2node 核心..."
     wget -N https://raw.githubusercontent.com/wyx2685/v2node/master/script/install.sh && bash install.sh
 }
 
-# 2. 配置 config.json
-configure_v2node() {
-    print_info "开始配置 v2node..."
-    
-    # 获取用户输入
+# 加载数据
+load_api_info() {
+    if [ -f "$API_INFO_FILE" ]; then
+        API_HOST=$(sed -n '1p' "$API_INFO_FILE")
+        API_KEY=$(sed -n '2p' "$API_INFO_FILE")
+        return 0
+    else
+        return 1
+    fi
+}
+
+# 2. 设置/初始化 API 配置
+setup_api() {
+    print_info "初始化 API 设置"
     read -p "请输入 ApiHost (例如 http://your-panel.com): " api_host
     read -p "请输入 ApiKey: " api_key
-    read -p "请输入节点 ID (NodeID): " node_id
     
-    if [[ -z "$api_host" || -z "$api_key" || -z "$node_id" ]]; then
-        print_error "所有配置项均为必填！"
+    if [[ -z "$api_host" || -z "$api_key" ]]; then
+        print_error "ApiHost 和 ApiKey 不能为空！"
         return 1
     fi
 
-    # 确保目录存在
     mkdir -p /etc/v2node
+    echo "$api_host" > "$API_INFO_FILE"
+    echo "$api_key" >> "$API_INFO_FILE"
+    chmod 600 "$API_INFO_FILE"
+    
+    # 初始化 config.json 结构 (如果还不存在)
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo '{"Log": {"Level": "warning", "Output": "", "Access": "none"}, "Nodes": []}' > "$CONFIG_FILE"
+    fi
+    
+    print_info "API 信息已保存至 $API_INFO_FILE"
+}
 
-    cat <<EOF > "$CONFIG_FILE"
+# 3. 添加节点
+add_node() {
+    if ! load_api_info; then
+        print_warn "未检测到 API 配置。请先输入："
+        setup_api || return 1
+        load_api_info
+    else
+        print_info "已提载 API 主机: $API_HOST"
+    fi
+    
+    read -p "请输入要添加的节点 ID (NodeID): " node_id
+    if [[ -z "$node_id" ]]; then
+        print_error "NodeID 不能为空！"
+        return 1
+    fi
+
+    # 检查 NodeID 是否已存在
+    if jq -e ".Nodes[] | select(.NodeID == $node_id)" "$CONFIG_FILE" > /dev/null 2>&1; then
+        print_warn "警告: NodeID $node_id 已存在于配置中。"
+        read -p "是否继续添加？(y/n): " confirm
+        [[ "$confirm" != "y" ]] && return 0
+    fi
+
+    # 构建新节点 JSON (适配精简版结构)
+    new_node=$(cat <<EOF
 {
-  "Log": {
-    "Level": "error",
-    "Output": ""
-  },
-  "Nodes": [
-    {
-      "Name": "Node_$node_id",
-      "ApiHost": "$api_host",
-      "ApiKey": "$api_key",
-      "NodeID": $node_id,
-      "NodeType": "vless",
-      "Timeout": 30,
-      "ListenIP": "0.0.0.0",
-      "SendIP": "0.0.0.0",
-      "Core": "xray",
-      "EnableDNS": true,
-      "DNSType": "UseIPv4"
-    }
-  ]
+  "ApiHost": "$API_HOST",
+  "NodeID": $node_id,
+  "ApiKey": "$API_KEY",
+  "Timeout": 15
 }
 EOF
+)
 
-    print_info "配置文件已写入: $CONFIG_FILE"
+    # 确保 config.json 存在且结构正确
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo '{"Log": {"Level": "warning", "Output": "", "Access": "none"}, "Nodes": []}' > "$CONFIG_FILE"
+    fi
+
+    # 使用 jq 追加到 Nodes 数组
+    tmp_json=$(jq ".Nodes += [$new_node]" "$CONFIG_FILE")
+    if [ $? -eq 0 ]; then
+        echo "$tmp_json" > "$CONFIG_FILE"
+        print_info "节点 $node_id 已成功添加到 $CONFIG_FILE"
+        restart_service
+    else
+        print_error "JSON 处理失败，请检查 jq 工具或配置文件格式。"
+    fi
 }
 
-# 3. 运行逻辑
-main() {
-    clear
-    echo "---------- v2node 自动化脚本 ----------"
-    install_v2node
-    configure_v2node
-    
-    print_info "正在尝试启动/重启 v2node 服务..."
-    # 假设安装后二进制文件名为 v2node 并注册了服务
+# 4. 重启服务
+restart_service() {
+    print_info "正在重启 v2node 服务..."
     if command -v v2node &> /dev/null; then
         v2node restart
     elif systemctl list-unit-files | grep -q v2node; then
         systemctl restart v2node
     else
-        print_info "未能自动识别启动命令，请手动重启服务。"
+        print_warn "未能自动识别启动命令，请手动重启服务。"
     fi
-    
-    print_info "全部操作完成！"
 }
 
-main
+# 5. 查看当前配置
+view_status() {
+    if [ -f "$API_INFO_FILE" ]; then
+        load_api_info
+        echo -e "全局 API: ${yellow}$API_HOST${plain}"
+    fi
+    if [ -f "$CONFIG_FILE" ]; then
+        print_info "当前已配置的节点列表:"
+        jq -r '.Nodes[] | "ID: \(.NodeID) | Name: \(.Name)"' "$CONFIG_FILE"
+    else
+        print_error "配置文件不存在。"
+    fi
+}
+
+# 运行逻辑
+main_menu() {
+    install_dependencies
+    while true; do
+        echo -e "\n---------- v2node 自动化管理脚本 ----------"
+        echo "1. 安装 v2node 核心"
+        echo "2. 初始化/设置 API (ApiHost/ApiKey)"
+        echo "3. 添加新节点 (需先完成选项 2)"
+        echo "4. 重启 v2node 服务"
+        echo "5. 查看当前已配置节点"
+        echo "0. 退出脚本"
+        echo "-------------------------------------------"
+        read -p "请选择操作 [0-5]: " choice
+        
+        case $choice in
+            1) install_v2node ;;
+            2) setup_api ;;
+            3) add_node ;;
+            4) restart_service ;;
+            5) view_status ;;
+            0) exit 0 ;;
+            *) echo "无效选择，请重新输入。" ;;
+        esac
+    done
+}
+
+main_menu
