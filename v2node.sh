@@ -139,16 +139,15 @@ EOF
 # 4. 重启服务
 restart_service() {
     print_info "正在重启 v2node 服务..."
-    if command -v v2node &> /dev/null; then
-        v2node restart
-    elif systemctl list-unit-files | grep -q v2node; then
-        systemctl restart v2node
-    else
-        print_warn "未能自动识别启动命令，请手动重启服务。"
-    fi
+    v2node restart
 }
 
-# 5. 查看当前配置
+# 5. 查看日志
+view_log() {
+    v2node log
+}
+
+# 6. 查看配置状态 (简略)
 view_status() {
     if [ -f "$API_INFO_FILE" ]; then
         load_api_info
@@ -156,7 +155,23 @@ view_status() {
     fi
     if [ -f "$CONFIG_FILE" ]; then
         print_info "当前已配置的节点列表:"
-        jq -r '.Nodes[] | "ID: \(.NodeID) | Name: \(.Name)"' "$CONFIG_FILE"
+        jq -r '.Nodes[] | "ID: \(.NodeID)"' "$CONFIG_FILE"
+    else
+        print_error "配置文件不存在。"
+    fi
+}
+
+# 7. 查看原始配置文件
+view_config_file() {
+    if [ -f "$CONFIG_FILE" ]; then
+        print_info "文件路径: $CONFIG_FILE"
+        echo "-------------------------------------------"
+        if command -v jq &> /dev/null; then
+            jq . "$CONFIG_FILE"
+        else
+            cat "$CONFIG_FILE"
+        fi
+        echo "-------------------------------------------"
     else
         print_error "配置文件不存在。"
     fi
@@ -171,17 +186,21 @@ main_menu() {
         echo "2. 初始化/设置 API (ApiHost/ApiKey)"
         echo "3. 添加新节点 (需先完成选项 2)"
         echo "4. 重启 v2node 服务"
-        echo "5. 查看当前已配置节点"
+        echo "5. 查看 v2node 日志"
+        echo "6. 查看节点运行状态 (简略)"
+        echo "7. 查看完整配置文件 (JSON)"
         echo "0. 退出脚本"
         echo "-------------------------------------------"
-        read -p "请选择操作 [0-5]: " choice
+        read -p "请选择操作 [0-7]: " choice
         
         case $choice in
             1) install_v2node ;;
             2) setup_api ;;
             3) add_node ;;
             4) restart_service ;;
-            5) view_status ;;
+            5) view_log ;;
+            6) view_status ;;
+            7) view_config_file ;;
             0) exit 0 ;;
             *) echo "无效选择，请重新输入。" ;;
         esac
