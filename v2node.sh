@@ -156,18 +156,68 @@ EOF
     fi
 }
 
-# 4. 重启服务
+# 4. 删除节点
+delete_node() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        print_error "配置文件不存在。"
+        return 1
+    fi
+    
+    read -p "请输入要删除的节点 ID (NodeID, 多个以空格或逗号分隔): " input_ids
+    if [[ -z "$input_ids" ]]; then
+        print_error "NodeID 不能为空！"
+        return 1
+    fi
+
+    # 替换逗号为空格，并按空格分割
+    local node_ids=$(echo "$input_ids" | tr ',' ' ')
+    local deleted_count=0
+
+    for node_id in $node_ids; do
+        # 验证是否为纯数字
+        if ! [[ "$node_id" =~ ^[0-9]+$ ]]; then
+            print_error "无效的 NodeID: $node_id (必须为数字)，跳过。"
+            continue
+        fi
+
+        # 检查 NodeID 是否存在
+        if ! jq -e ".Nodes[] | select(.NodeID == $node_id)" "$CONFIG_FILE" > /dev/null 2>&1; then
+            print_warn "警告: NodeID $node_id 不在配置中，跳过。"
+            continue
+        fi
+
+        print_info "正在删除节点: $node_id ..."
+
+        # 使用 jq 删除匹配的 NodeID
+        tmp_json=$(jq "del(.Nodes[] | select(.NodeID == $node_id))" "$CONFIG_FILE")
+        if [ $? -eq 0 ]; then
+            echo "$tmp_json" > "$CONFIG_FILE"
+            ((deleted_count++))
+        else
+            print_error "JSON 删除操作失败 ($node_id)。"
+        fi
+    done
+
+    if [ $deleted_count -gt 0 ]; then
+        print_info "共成功删除了 $deleted_count 个节点。"
+        restart_service
+    else
+        print_warn "没有节点被删除。"
+    fi
+}
+
+# 5. 重启服务
 restart_service() {
     print_info "正在重启 v2node 服务..."
     v2node restart
 }
 
-# 5. 查看日志
+# 6. 查看日志
 view_log() {
     v2node log
 }
 
-# 6. 查看配置状态 (简略)
+# 7. 查看配置状态 (简略)
 view_status() {
     if [ -f "$API_INFO_FILE" ]; then
         load_api_info
@@ -181,7 +231,7 @@ view_status() {
     fi
 }
 
-# 7. 查看原始配置文件
+# 8. 查看原始配置文件
 view_config_file() {
     if [ -f "$CONFIG_FILE" ]; then
         print_info "文件路径: $CONFIG_FILE"
@@ -205,22 +255,24 @@ main_menu() {
         echo "1. 安装 v2node 核心"
         echo "2. 初始化/设置 API (ApiHost/ApiKey)"
         echo "3. 添加新节点 (需先完成选项 2)"
-        echo "4. 重启 v2node 服务"
-        echo "5. 查看 v2node 日志"
-        echo "6. 查看节点运行状态 (简略)"
-        echo "7. 查看完整配置文件 (JSON)"
+        echo "4. 删除现有节点"
+        echo "5. 重启 v2node 服务"
+        echo "6. 查看 v2node 日志"
+        echo "7. 查看节点运行状态 (简略)"
+        echo "8. 查看完整配置文件 (JSON)"
         echo "0. 退出脚本"
         echo "-------------------------------------------"
-        read -p "请选择操作 [0-7]: " choice
+        read -p "请选择操作 [0-8]: " choice
         
         case $choice in
             1) install_v2node ;;
             2) setup_api ;;
             3) add_node ;;
-            4) restart_service ;;
-            5) view_log ;;
-            6) view_status ;;
-            7) view_config_file ;;
+            4) delete_node ;;
+            5) restart_service ;;
+            6) view_log ;;
+            7) view_status ;;
+            8) view_config_file ;;
             0) exit 0 ;;
             *) echo "无效选择，请重新输入。" ;;
         esac
