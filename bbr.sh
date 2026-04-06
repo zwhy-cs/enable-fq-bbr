@@ -107,5 +107,3 @@ CRON_JOB_DOG="@reboot sleep 30 && echo \"0\" | /usr/local/bin/dog"
 # 2. 检查任务是否已存在，不存在则添加
 (crontab -l 2>/dev/null | grep -Fq "$CRON_JOB_REBOOT") || (crontab -l 2>/dev/null; echo "$CRON_JOB_REBOOT") | crontab -
 (crontab -l 2>/dev/null | grep -Fq "$CRON_JOB_DOG") || (crontab -l 2>/dev/null; echo "$CRON_JOB_DOG") | crontab -
-
-reboot
