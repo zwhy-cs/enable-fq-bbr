@@ -34,7 +34,7 @@ read -p "是否需要配置 TCP 窗口大小？(y/n, 默认 n): " config_tcp_win
 if [[ "$config_tcp_win" =~ ^[Yy]$ ]]; then
     # 直接覆盖 sysctl.conf 内容 (包含 TCP 窗口等)
     cat <<EOF > /etc/sysctl.conf
-net.core.default_qdisc = cake
+net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 net.ipv4.tcp_wmem = 4096 16384 16777216
 net.ipv4.tcp_rmem = 4096 87380 16777216
