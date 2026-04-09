@@ -112,12 +112,13 @@ CRON_JOB_DOG="@reboot sleep 30 && echo \"0\" | /usr/local/bin/dog"
 cat << 'EOF' > /usr/local/bin/set-fq.sh
 #!/bin/bash
 IFACE=$(ip route show default | awk '/default/ {print $5}' | head -n1)
-
 if [ -n "$IFACE" ]; then
-    echo "Applying FQ to interface: $IFACE"
+    echo "Applying settings to interface: $IFACE"
+    ip link set dev "$IFACE" mtu 1400
     /sbin/tc qdisc replace dev "$IFACE" root fq
+    echo "Successfully set MTU to 1400 and applied FQ on $IFACE."
 else
-    echo "No default interface found."
+    echo "Error: No default interface found."
     exit 1
 fi
 EOF
