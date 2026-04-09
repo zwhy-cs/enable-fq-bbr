@@ -108,4 +108,41 @@ CRON_JOB_DOG="@reboot sleep 30 && echo \"0\" | /usr/local/bin/dog"
 (crontab -l 2>/dev/null | grep -Fq "$CRON_JOB_REBOOT") || (crontab -l 2>/dev/null; echo "$CRON_JOB_REBOOT") | crontab -
 (crontab -l 2>/dev/null | grep -Fq "$CRON_JOB_DOG") || (crontab -l 2>/dev/null; echo "$CRON_JOB_DOG") | crontab -
 
+
+cat << 'EOF' > /usr/local/bin/set-fq.sh
+#!/bin/bash
+IFACE=$(ip route show default | awk '/default/ {print $5}' | head -n1)
+
+if [ -n "$IFACE" ]; then
+    echo "Applying FQ to interface: $IFACE"
+    /sbin/tc qdisc replace dev "$IFACE" root fq
+else
+    echo "No default interface found."
+    exit 1
+fi
+EOF
+
+chmod +x /usr/local/bin/set-fq.sh
+
+cat << 'EOF' > /etc/systemd/system/ensure-fq.service
+[Unit]
+Description=Force FQ Qdisc on Default Interface
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# 延迟 10 秒确保云厂商的初始化脚本已经跑完
+ExecStartPre=/usr/bin/sleep 10
+ExecStart=/usr/local/bin/set-fq.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable ensure-fq.service
+systemctl start ensure-fq.service
+
 reboot
