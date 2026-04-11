@@ -32,22 +32,11 @@ fi
 
 # 安装必要依赖
 install_dependencies() {
-    if ! command -v jq &> /dev/null; then
-        print_info "正在安装 jq (JSON 处理工具)..."
-        if command -v apt-get &> /dev/null; then
-            apt-get update && apt-get install -y jq
-        elif command -v yum &> /dev/null; then
-            yum install -y jq
-        else
-            print_error "未找到包管理器，请手动安装 jq。"
-            exit 1
-        fi
-    fi
+    apt install -y jq
 }
 
 # 1. 基础安装 v2node
 install_v2node() {
-    print_info "正在开始安装 v2node 核心..."
     wget -N https://raw.githubusercontent.com/wyx2685/v2node/master/script/install.sh && bash install.sh
 }
 
