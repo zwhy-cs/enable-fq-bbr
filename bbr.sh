@@ -12,8 +12,6 @@ fi
 cat <<EOF > /etc/resolv.conf
 nameserver 8.8.8.8
 nameserver 8.8.4.4
-nameserver 2001:4860:4860::8888
-nameserver 2001:4860:4860::8844
 EOF
 # 写入后上锁，防止被修改
 chattr +i /etc/resolv.conf || true
@@ -22,7 +20,7 @@ chattr +i /etc/resolv.conf || true
 # 安装必要软件包（使用 apt-get 安装） #
 ##########################################
 echo "开始安装必要的软件包..."
-apt update && apt install -y iperf3 unzip wget python3 nano dnsutils
+apt update && apt install -y iperf3 unzip wget nano dnsutils
 apt install systemd-timesyncd -y
 systemctl enable --now systemd-timesyncd
 
@@ -109,41 +107,41 @@ CRON_JOB_DOG="@reboot sleep 30 && echo \"0\" | /usr/local/bin/dog"
 (crontab -l 2>/dev/null | grep -Fq "$CRON_JOB_DOG") || (crontab -l 2>/dev/null; echo "$CRON_JOB_DOG") | crontab -
 
 
-cat << 'EOF' > /usr/local/bin/set-fq.sh
-#!/bin/bash
-IFACE=$(ip route show default | awk '/default/ {print $5}' | head -n1)
-if [ -n "$IFACE" ]; then
-    echo "Applying settings to interface: $IFACE"
-    ip link set dev "$IFACE" mtu 1400
-    /sbin/tc qdisc replace dev "$IFACE" root fq
-    echo "Successfully set MTU to 1400 and applied FQ on $IFACE."
-else
-    echo "Error: No default interface found."
-    exit 1
-fi
-EOF
+# cat << 'EOF' > /usr/local/bin/set-fq.sh
+# #!/bin/bash
+# IFACE=$(ip route show default | awk '/default/ {print $5}' | head -n1)
+# if [ -n "$IFACE" ]; then
+#     echo "Applying settings to interface: $IFACE"
+#     ip link set dev "$IFACE" mtu 1400
+#     /sbin/tc qdisc replace dev "$IFACE" root fq
+#     echo "Successfully set MTU to 1400 and applied FQ on $IFACE."
+# else
+#     echo "Error: No default interface found."
+#     exit 1
+# fi
+# EOF
 
-chmod +x /usr/local/bin/set-fq.sh
+# chmod +x /usr/local/bin/set-fq.sh
 
-cat << 'EOF' > /etc/systemd/system/ensure-fq.service
-[Unit]
-Description=Force FQ Qdisc on Default Interface
-After=network-online.target
-Wants=network-online.target
+# cat << 'EOF' > /etc/systemd/system/ensure-fq.service
+# [Unit]
+# Description=Force FQ Qdisc on Default Interface
+# After=network-online.target
+# Wants=network-online.target
 
-[Service]
-Type=oneshot
-# 延迟 10 秒确保云厂商的初始化脚本已经跑完
-ExecStartPre=/usr/bin/sleep 10
-ExecStart=/usr/local/bin/set-fq.sh
-RemainAfterExit=yes
+# [Service]
+# Type=oneshot
+# # 延迟 10 秒确保云厂商的初始化脚本已经跑完
+# ExecStartPre=/usr/bin/sleep 10
+# ExecStart=/usr/local/bin/set-fq.sh
+# RemainAfterExit=yes
 
-[Install]
-WantedBy=multi-user.target
-EOF
+# [Install]
+# WantedBy=multi-user.target
+# EOF
 
-systemctl daemon-reload
-systemctl enable ensure-fq.service
-systemctl start ensure-fq.service
+# systemctl daemon-reload
+# systemctl enable ensure-fq.service
+# systemctl start ensure-fq.service
 
 reboot
