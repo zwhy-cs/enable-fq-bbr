@@ -32,7 +32,9 @@ fi
 
 # 安装必要依赖
 install_dependencies() {
-    apt install -y jq
+    if ! command -v jq &> /dev/null; then
+        apt install -y jq
+    fi
 }
 
 # 1. 基础安装 v2node
