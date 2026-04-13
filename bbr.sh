@@ -55,28 +55,28 @@ echo "sysctl 配置已覆盖并生效！"
 #######################################
 # 修改 MTU 配置 (可选)                #
 #######################################
-read -p "是否需要修改网卡 MTU 为 1400？(y/n, 默认 n): " config_mtu
-if [[ "$config_mtu" =~ ^[Yy]$ ]]; then
-    # 获取默认出口网卡名称
-    MAIN_INTERFACE=$(ip route get 8.8.8.8 | grep -oP 'dev \K\S+')
-    if [ -n "$MAIN_INTERFACE" ]; then
-        if [ -f /etc/network/interfaces ]; then
-            if grep -q "mtu 1400" /etc/network/interfaces; then
-                echo "MTU 1400 配置已在 /etc/network/interfaces 中。"
-                ip link set dev $MAIN_INTERFACE mtu 1400
-                echo "已确保接口 $MAIN_INTERFACE 的 MTU 1400 立即生效。"
-            else
-                sed -i "/iface $MAIN_INTERFACE/a \    mtu 1400" /etc/network/interfaces
-                ip link set dev $MAIN_INTERFACE mtu 1400
-                echo "已为网卡 $MAIN_INTERFACE 成功添加并立即生效 MTU 1400 配置。"
-            fi
-        else
-            echo "未找到 /etc/network/interfaces 文件，无法自动修改 MTU。"
-        fi
-    else
-        echo "未发现默认网卡，无法自动配置 MTU。"
-    fi
-fi
+# read -p "是否需要修改网卡 MTU 为 1400？(y/n, 默认 n): " config_mtu
+# if [[ "$config_mtu" =~ ^[Yy]$ ]]; then
+#     # 获取默认出口网卡名称
+#     MAIN_INTERFACE=$(ip route get 8.8.8.8 | grep -oP 'dev \K\S+')
+#     if [ -n "$MAIN_INTERFACE" ]; then
+#         if [ -f /etc/network/interfaces ]; then
+#             if grep -q "mtu 1400" /etc/network/interfaces; then
+#                 echo "MTU 1400 配置已在 /etc/network/interfaces 中。"
+#                 ip link set dev $MAIN_INTERFACE mtu 1400
+#                 echo "已确保接口 $MAIN_INTERFACE 的 MTU 1400 立即生效。"
+#             else
+#                 sed -i "/iface $MAIN_INTERFACE/a \    mtu 1400" /etc/network/interfaces
+#                 ip link set dev $MAIN_INTERFACE mtu 1400
+#                 echo "已为网卡 $MAIN_INTERFACE 成功添加并立即生效 MTU 1400 配置。"
+#             fi
+#         else
+#             echo "未找到 /etc/network/interfaces 文件，无法自动修改 MTU。"
+#         fi
+#     else
+#         echo "未发现默认网卡，无法自动配置 MTU。"
+#     fi
+# fi
 
 #######################################
 # 执行 nxtrace 远程脚本（可选操作） #
