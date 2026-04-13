@@ -80,14 +80,8 @@ enable_choose_compose() {
   echo ">>> 请选择一个服务实例:"
   local service_dirs=()
   while IFS= read -r -d $'\0'; do
-      local dir_name
-      dir_name=$(basename "$REPLY")
-      # 凭证文件不是一个服务实例，跳过它
-      if [ "$dir_name" == "credentials.json" ]; then
-          continue
-      fi
-      service_dirs+=("$dir_name")
-  done < <(find "$SOGA_DIR" -mindepth 1 -maxdepth 1 -print0)
+      service_dirs+=("$(basename "$REPLY")")
+  done < <(find "$SOGA_DIR" -mindepth 1 -maxdepth 1 -type d -print0)
 
   if [ ${#service_dirs[@]} -eq 0 ]; then
       echo "未找到任何 Soga 服务实例。"
@@ -145,7 +139,7 @@ add_credential() {
 
 list_credentials() {
   echo ">>> 可用的API凭证:"
-  if ! jq -e 'any' "$CREDENTIALS_FILE" >/dev/null; then
+  if [ "$(jq 'length' "$CREDENTIALS_FILE")" -eq 0 ]; then
     echo "没有找到任何凭证。"
     return 1
   fi
@@ -240,7 +234,6 @@ install_soga() {
   fi
 
   local service_name="${instance_name}-${server_type}"
-  local container_name="$service_name"
 
   if [ -d "$SOGA_DIR/$service_name" ]; then
       echo "错误：服务实例 '$service_name' 已存在。"
@@ -248,8 +241,8 @@ install_soga() {
       return
   fi
 
-  if docker ps -a --format '{{.Names}}' | grep -Eq "^${container_name}$"; then
-    echo "错误：容器名称 '$container_name' 已存在，请使用其他名称。"
+  if docker ps -a --format '{{.Names}}' | grep -Eq "^${service_name}$"; then
+    echo "错误：容器名称 '$service_name' 已存在，请使用其他名称。"
     read -p "按回车键返回菜单..." _
     return
   fi
@@ -260,11 +253,11 @@ install_soga() {
 
   mkdir -p "$SOGA_DIR/$service_name"
   COMPOSE_FILE="$SOGA_DIR/$service_name/docker-compose.yml"
-  cat > "$COMPOSE_FILE" << EOF
+  cat > "$COMPOSE_FILE" <<EOF
 services:
   soga:
     image: vaxilu/soga:${soga_version}
-    container_name: $container_name
+    container_name: $service_name
     restart: always
     network_mode: host
     volumes:
@@ -278,8 +271,8 @@ services:
       - node_id=
       - forbidden_bit_torrent=false
       - log_level=debug
-      - default_dns=8.8.8.8,8.8.4.4,2001:4860:4860::8888,2001:4860:4860::8844
-      - dns_strategy=ipv4_first
+      - default_dns=8.8.8.8,8.8.4.4
+      - dns_strategy=ipv4_only
 EOF
 
   echo "配置文件已生成：$COMPOSE_FILE"
@@ -305,7 +298,7 @@ restart_soga() {
   echo " >>> 请选择要重启的服务实例"
   if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
   echo "重启服务：$COMPOSE_FILE"
-  docker compose -f "$COMPOSE_FILE" up -d
+  docker compose -f "$COMPOSE_FILE" restart
   echo "服务已重启。"
   read -p "按回车键返回菜单..." _
 }
@@ -399,15 +392,9 @@ delete_node() {
     return
   fi
 
-  # 将数组转回逗号分隔的字符串
+  # 将数组转回逗号分隔的字符串（空数组时为空字符串）
   new_node_id=$(IFS=,; echo "${new_node_ids[*]}")
-  
-  # 如果删除后为空，则设置为空
-  if [ -z "$new_node_id" ]; then
-    sed -i "s/node_id=.*/node_id=/" "$COMPOSE_FILE"
-  else
-    sed -i "s/node_id=.*/node_id=$new_node_id/" "$COMPOSE_FILE"
-  fi
+  sed -i "s/node_id=.*/node_id=$new_node_id/" "$COMPOSE_FILE"
   
   echo "正在重启服务以应用新配置..."
   docker compose -f "$COMPOSE_FILE" up -d
@@ -424,11 +411,8 @@ check_services() {
   echo "所有配置实例："
   local service_dirs=()
   while IFS= read -r -d $'\0'; do
-      local dir_name
-      dir_name=$(basename "$REPLY")
-      if [ "$dir_name" == "credentials.json" ]; then continue; fi
-      service_dirs+=("$dir_name")
-  done < <(find "$SOGA_DIR" -mindepth 1 -maxdepth 1 -print0)
+      service_dirs+=("$(basename "$REPLY")")
+  done < <(find "$SOGA_DIR" -mindepth 1 -maxdepth 1 -type d -print0)
 
   if [ ${#service_dirs[@]} -eq 0 ]; then
       echo "未找到任何 Soga 配置实例。"
@@ -445,8 +429,7 @@ update_soga() {
   echo " >>> 更新 Soga..."
   if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
 
-  current_image=$(grep -oP 'image: \K[^ ]*' "$COMPOSE_FILE")
-  echo "当前镜像: $current_image"
+  echo "当前镜像: $(grep -oP 'image: \K[^ ]*' "$COMPOSE_FILE")"
   read -p "请输入新的 Soga 版本 (留空以拉取当前版本最新镜像, 输入 'latest' 使用最新版): " new_version
 
   if [ -n "$new_version" ]; then
