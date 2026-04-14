@@ -271,7 +271,6 @@ services:
       - node_id=
       - forbidden_bit_torrent=false
       - log_level=debug
-      - default_dns=1.1.1.1,1.0.0.1
       - dns_strategy=ipv4_only
 EOF
 
