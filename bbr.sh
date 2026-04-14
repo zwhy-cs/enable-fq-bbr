@@ -10,8 +10,8 @@ if [ -L /etc/resolv.conf ]; then
     rm -f /etc/resolv.conf
 fi
 cat <<EOF > /etc/resolv.conf
-nameserver 1.1.1.1
-nameserver 1.0.0.1
+nameserver 8.8.8.8
+nameserver 8.8.4.4
 EOF
 # 写入后上锁，防止被修改
 chattr +i /etc/resolv.conf || true
@@ -28,10 +28,7 @@ systemctl enable --now systemd-timesyncd
 ##############################
 # 修改 sysctl 配置（fq、bbr） #
 ##############################
-read -p "是否需要配置 TCP 窗口大小？(y/n, 默认 n): " config_tcp_win
-if [[ "$config_tcp_win" =~ ^[Yy]$ ]]; then
-    # 直接覆盖 sysctl.conf 内容 (包含 TCP 窗口等)
-    cat <<EOF > /etc/sysctl.conf
+cat <<EOF > /etc/sysctl.conf
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 net.ipv4.tcp_wmem = 4096 16384 16777216
@@ -40,14 +37,6 @@ net.core.rmem_max = 16777216
 net.core.wmem_max = 16777216
 net.ipv4.tcp_slow_start_after_idle=0
 EOF
-else
-    # 仅写入 bbr 和 fq
-    cat <<EOF > /etc/sysctl.conf
-net.core.default_qdisc = cake
-net.ipv4.tcp_congestion_control = bbr
-EOF
-fi
-
 # 使 sysctl 配置生效
 sysctl -p
 echo "sysctl 配置已覆盖并生效！"
