@@ -50,16 +50,52 @@ echo -e "${BOLD}║    nftables 端口转发 交互式配置工具      ║${RES
 echo -e "${BOLD}╚══════════════════════════════════════════╝${RESET}"
 echo ""
 
-# ── 收集转发规则 ──────────────────
+# ── 从配置文件加载已有规则 ────────
 RULES=()   # 格式：listen_port dest_ip dest_port
 
+if [[ -f "$NFT_CONF" ]]; then
+    in_nat=0
+    depth=0
+    while IFS= read -r line; do
+        # 识别 table ip nat { 块开始
+        if [[ "$line" =~ ^table[[:space:]]ip[[:space:]]nat[[:space:]]*\{ ]]; then
+            in_nat=1; depth=1; continue
+        fi
+        if (( in_nat )); then
+            # 统计括号深度
+            opens=$(grep -o '{' <<< "$line" | wc -l)
+            closes=$(grep -o '}' <<< "$line" | wc -l)
+            (( depth += opens - closes ))
+            (( depth <= 0 )) && { in_nat=0; continue; }
+            # 只解析 tcp dnat 行（udp 是同步添加的，不重复读取）
+            if [[ "$line" =~ tcp[[:space:]]+dport[[:space:]]+([0-9]+)[[:space:]]+dnat[[:space:]]+to[[:space:]]+([0-9.]+):([0-9]+) ]]; then
+                RULES+=("${BASH_REMATCH[1]} ${BASH_REMATCH[2]} ${BASH_REMATCH[3]}")
+            fi
+        fi
+    done < "$NFT_CONF"
+fi
+
+# ── 显示已有规则，询问追加 ────────
 echo -e "每条规则：本机端口 → 目标 IP:端口（TCP + UDP）"
-echo -e "${BOLD}监听端口直接回车${RESET}结束添加（至少填一条）。"
+
+if (( ${#RULES[@]} > 0 )); then
+    echo -e "${BOLD}── 已有规则 ──${RESET}"
+    printf "  ${BOLD}%-12s  %-24s  %s${RESET}\n" "监听端口" "目标地址" "协议"
+    printf "  %s\n" "────────────────────────────────────────"
+    for rule in "${RULES[@]}"; do
+        read -r lport dip dport <<< "$rule"
+        printf "  %-12s  %-24s  %s\n" "*:${lport}" "${dip}:${dport}" "TCP + UDP"
+    done
+    echo ""
+    echo -e "以下追加新规则，${BOLD}监听端口直接回车${RESET}跳过（保留已有规则）。"
+else
+    echo -e "${BOLD}监听端口直接回车${RESET}结束（至少填一条）。"
+fi
 echo ""
 
-index=1
+index=$(( ${#RULES[@]} + 1 ))
 while true; do
-    echo -e "${BOLD}── 规则 #${index} ──${RESET}"
+    echo -e "${BOLD}── 新规则 #${index} ──${RESET}"
 
     # 监听端口
     while true; do
@@ -97,59 +133,53 @@ while true; do
     (( index++ ))
 done
 
-# ── 构建 prerouting 规则行 ────────
-DNAT_LINES=""
-for rule in "${RULES[@]}"; do
-    read -r lport dip dport <<< "$rule"
-    DNAT_LINES+="                tcp dport ${lport} dnat to ${dip}:${dport}\n"
-    DNAT_LINES+="                udp dport ${lport} dnat to ${dip}:${dport}\n"
-done
-
-# ── 构建 postrouting 规则行（按唯一目标 IP）──
-declare -A SEEN_IPS
-MASQ_LINES=""
-for rule in "${RULES[@]}"; do
-    read -r lport dip dport <<< "$rule"
-    if [[ -z "${SEEN_IPS[$dip]+x}" ]]; then
-        MASQ_LINES+="                ip daddr ${dip} masquerade\n"
-        SEEN_IPS[$dip]=1
-    fi
-done
-
 # ── 备份旧配置 ────────────────────
 if [[ -f "$NFT_CONF" ]]; then
     cp "$NFT_CONF" "${NFT_CONF}.bak.$(date +%Y%m%d%H%M%S)"
     info "已备份旧配置"
 fi
 
-# ── 写入新配置文件 ────────────────
+# ── 写入新配置文件（逐行输出，避免命令替换剥掉尾部换行）──
 info "写入 ${NFT_CONF} ..."
 
-cat > "$NFT_CONF" << EOF
-flush ruleset
-table inet filter {
-        chain input {
-                type filter hook input priority filter; policy accept;
-        }
-
-        chain forward {
-                type filter hook forward priority filter; policy accept;
-        }
-
-        chain output {
-                type filter hook output priority filter; policy accept;
-        }
-}
-table ip nat {
-        chain prerouting {
-                type nat hook prerouting priority dstnat; policy accept;
-$(printf '%b' "${DNAT_LINES}")        }
-
-        chain postrouting {
-                type nat hook postrouting priority srcnat; policy accept;
-$(printf '%b' "${MASQ_LINES}")        }
-}
-EOF
+{
+    echo "flush ruleset"
+    echo "table inet filter {"
+    echo "        chain input {"
+    echo "                type filter hook input priority filter; policy accept;"
+    echo "        }"
+    echo ""
+    echo "        chain forward {"
+    echo "                type filter hook forward priority filter; policy accept;"
+    echo "        }"
+    echo ""
+    echo "        chain output {"
+    echo "                type filter hook output priority filter; policy accept;"
+    echo "        }"
+    echo "}"
+    echo "table ip nat {"
+    echo "        chain prerouting {"
+    echo "                type nat hook prerouting priority dstnat; policy accept;"
+    for rule in "${RULES[@]}"; do
+        read -r lport dip dport <<< "$rule"
+        echo "                tcp dport ${lport} dnat to ${dip}:${dport}"
+        echo "                udp dport ${lport} dnat to ${dip}:${dport}"
+    done
+    echo "        }"
+    echo ""
+    echo "        chain postrouting {"
+    echo "                type nat hook postrouting priority srcnat; policy accept;"
+    declare -A SEEN_IPS
+    for rule in "${RULES[@]}"; do
+        read -r lport dip dport <<< "$rule"
+        if [[ -z "${SEEN_IPS[$dip]+x}" ]]; then
+            echo "                ip daddr ${dip} masquerade"
+            SEEN_IPS[$dip]=1
+        fi
+    done
+    echo "        }"
+    echo "}"
+} > "$NFT_CONF"
 
 
 # ── 加载配置 ──────────────────────
