@@ -27,8 +27,23 @@ prompt()  { printf "${BOLD}${YELLOW}>>> $*${RESET} "; }
 [[ $EUID -eq 0 ]] || error "请以 root 身份运行（sudo bash $0）"
 command -v nft &>/dev/null || error "未找到 nft，请先安装：apt install nftables"
 [[ -f "$NFT_CONF" ]] || error "${NFT_CONF} 不存在"
-grep -q "chain prerouting"  "$NFT_CONF" || error "${NFT_CONF} 中未找到 chain prerouting"
-grep -q "chain postrouting" "$NFT_CONF" || error "${NFT_CONF} 中未找到 chain postrouting"
+
+# 若文件中没有 table ip nat，则追加基础结构
+if ! grep -q "table ip nat" "$NFT_CONF"; then
+    warn "${NFT_CONF} 中未找到 table ip nat，自动追加基础配置..."
+    cat >> "$NFT_CONF" << 'EOF'
+table ip nat {
+        chain prerouting {
+                type nat hook prerouting priority dstnat; policy accept;
+        }
+
+        chain postrouting {
+                type nat hook postrouting priority srcnat; policy accept;
+        }
+}
+EOF
+    success "已追加 table ip nat 基础配置"
+fi
 
 # ────────────────────────────────
 #  输入验证
