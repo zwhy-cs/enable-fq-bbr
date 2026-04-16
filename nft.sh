@@ -243,6 +243,7 @@ while true; do
         success "配置文件已更新"
 
         info "加载配置：nft -f ${NFT_CONF}"
+        nft flush ruleset
         nft -f "$NFT_CONF"
         success "配置已生效"
 
