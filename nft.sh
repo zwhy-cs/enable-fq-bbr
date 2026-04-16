@@ -244,6 +244,7 @@ while true; do
         nft flush ruleset
         sleep 1
         nft -f /etc/nftables.conf
+        systemctl enable nftables
         echo ""
         echo -e "${GREEN}══════════════════════════════════════════${RESET}"
         echo -e "${GREEN}  完成 ✔  （共 ${#RULES[@]} 条规则）${RESET}"
