@@ -242,15 +242,10 @@ while true; do
         write_conf
         success "配置文件已更新"
 
-        info "加载配置：nft -f ${NFT_CONF}"
-        nft -f "$NFT_CONF"
-        nft flush ruleset
-        nft -f "$NFT_CONF"
-        success "配置已生效"
-
         systemctl enable nftables &>/dev/null
         success "nftables.service 已设置开机自启"
-
+        nft flush ruleset
+        nft -f "$NFT_CONF"
         echo ""
         echo -e "${GREEN}══════════════════════════════════════════${RESET}"
         echo -e "${GREEN}  完成 ✔  （共 ${#RULES[@]} 条规则）${RESET}"
