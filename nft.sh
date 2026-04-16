@@ -242,6 +242,7 @@ while true; do
         write_conf
         success "配置文件已更新"
         nft flush ruleset
+        sleep 1
         nft -f /etc/nftables.conf
         echo ""
         echo -e "${GREEN}══════════════════════════════════════════${RESET}"
