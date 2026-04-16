@@ -121,12 +121,19 @@ write_conf() {
         echo ""
         echo "        chain postrouting {"
         echo "                type nat hook postrouting priority srcnat; policy accept;"
-        # masquerade：按唯一目标 IP 去重
+        # snat：按唯一目标 IP 去重，自动探测本机出口 IP
         declare -A seen
         for rule in "${RULES[@]}"; do
             read -r lport dip dport <<< "$rule"
             if [[ -z "${seen[$dip]+x}" ]]; then
-                echo "                ip daddr ${dip} masquerade"
+                # 自动获取到达目标 IP 时使用的本机源 IP
+                local_ip=$(ip route get "${dip}" 2>/dev/null | grep -oP 'src \K\S+' | head -1 || true)
+                if [[ -n "$local_ip" ]]; then
+                    echo "                ip daddr ${dip} snat to ${local_ip}"
+                else
+                    # 获取失败则回退到 masquerade
+                    echo "                ip daddr ${dip} masquerade"
+                fi
                 seen[$dip]=1
             fi
         done
