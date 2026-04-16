@@ -241,9 +241,6 @@ while true; do
         info "写入 ${NFT_CONF} ..."
         write_conf
         success "配置文件已更新"
-
-        systemctl enable nftables &>/dev/null
-        success "nftables.service 已设置开机自启"
         nft flush ruleset
         nft -f /etc/nftables.conf
         echo ""
