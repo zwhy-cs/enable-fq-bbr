@@ -245,7 +245,7 @@ while true; do
         systemctl enable nftables &>/dev/null
         success "nftables.service 已设置开机自启"
         nft flush ruleset
-        nft -f "$NFT_CONF"
+        nft -f /etc/nftables.conf
         echo ""
         echo -e "${GREEN}══════════════════════════════════════════${RESET}"
         echo -e "${GREEN}  完成 ✔  （共 ${#RULES[@]} 条规则）${RESET}"
