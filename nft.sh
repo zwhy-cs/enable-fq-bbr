@@ -1,7 +1,8 @@
 #!/bin/bash
 # ============================================================
 #  nft.sh
-#  交互式配置 nftables 端口转发，Debian 11
+#  向 /etc/nftables.conf 的 table ip nat 追加端口转发规则
+#  前提：配置文件已含 table ip nat { chain prerouting/postrouting }
 #  用法：sudo bash nft.sh
 # ============================================================
 
@@ -25,7 +26,9 @@ prompt()  { printf "${BOLD}${YELLOW}>>> $*${RESET} "; }
 # ────────────────────────────────
 [[ $EUID -eq 0 ]] || error "请以 root 身份运行（sudo bash $0）"
 command -v nft &>/dev/null || error "未找到 nft，请先安装：apt install nftables"
-
+[[ -f "$NFT_CONF" ]] || error "${NFT_CONF} 不存在，请先创建基础配置"
+grep -q "chain prerouting"  "$NFT_CONF" || error "${NFT_CONF} 中未找到 chain prerouting"
+grep -q "chain postrouting" "$NFT_CONF" || error "${NFT_CONF} 中未找到 chain postrouting"
 
 # ────────────────────────────────
 #  输入验证
@@ -42,7 +45,7 @@ is_valid_port() {
 }
 
 # ────────────────────────────────
-#  主流程
+#  Banner
 # ────────────────────────────────
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════╗${RESET}"
@@ -50,67 +53,46 @@ echo -e "${BOLD}║    nftables 端口转发 交互式配置工具      ║${RES
 echo -e "${BOLD}╚══════════════════════════════════════════╝${RESET}"
 echo ""
 
-# ── 从配置文件加载已有规则 ────────
-RULES=()   # 格式：listen_port dest_ip dest_port
-
-if [[ -f "$NFT_CONF" ]]; then
-    in_nat=0
-    depth=0
-    while IFS= read -r line; do
-        # 识别 table ip nat { 块开始
-        if [[ "$line" =~ ^table[[:space:]]ip[[:space:]]nat[[:space:]]*\{ ]]; then
-            in_nat=1; depth=1; continue
+# ────────────────────────────────
+#  显示已有规则（只读，不解析）
+# ────────────────────────────────
+existing=$(grep -E "tcp dport [0-9]+ dnat to" "$NFT_CONF" || true)
+if [[ -n "$existing" ]]; then
+    info "当前已有转发规则："
+    printf "  ${BOLD}%-12s  %-24s${RESET}\n" "监听端口" "目标地址"
+    printf "  %s\n" "────────────────────────────────────"
+    while read -r line; do
+        if [[ "$line" =~ tcp[[:space:]]+dport[[:space:]]+([0-9]+)[[:space:]]+dnat[[:space:]]+to[[:space:]]+([^[:space:]]+) ]]; then
+            printf "  %-12s  %-24s\n" "*:${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
         fi
-        if (( in_nat )); then
-            # 统计括号深度
-            opens=$(grep -o '{' <<< "$line" | wc -l)
-            closes=$(grep -o '}' <<< "$line" | wc -l)
-            (( depth += opens - closes ))
-            (( depth <= 0 )) && { in_nat=0; continue; }
-            # 只解析 tcp dnat 行（udp 是同步添加的，不重复读取）
-            if [[ "$line" =~ tcp[[:space:]]+dport[[:space:]]+([0-9]+)[[:space:]]+dnat[[:space:]]+to[[:space:]]+([0-9.]+):([0-9]+) ]]; then
-                RULES+=("${BASH_REMATCH[1]} ${BASH_REMATCH[2]} ${BASH_REMATCH[3]}")
-            fi
-        fi
-    done < "$NFT_CONF"
-fi
-
-# ── 显示已有规则，询问追加 ────────
-echo -e "每条规则：本机端口 → 目标 IP:端口（TCP + UDP）"
-
-if (( ${#RULES[@]} > 0 )); then
-    echo -e "${BOLD}── 已有规则 ──${RESET}"
-    printf "  ${BOLD}%-12s  %-24s  %s${RESET}\n" "监听端口" "目标地址" "协议"
-    printf "  %s\n" "────────────────────────────────────────"
-    for rule in "${RULES[@]}"; do
-        read -r lport dip dport <<< "$rule"
-        printf "  %-12s  %-24s  %s\n" "*:${lport}" "${dip}:${dport}" "TCP + UDP"
-    done
+    done <<< "$existing"
     echo ""
-    echo -e "以下追加新规则，${BOLD}监听端口直接回车${RESET}跳过（保留已有规则）。"
-else
-    echo -e "${BOLD}监听端口直接回车${RESET}结束（至少填一条）。"
 fi
+
+# ────────────────────────────────
+#  收集新规则
+# ────────────────────────────────
+NEW_RULES=()
+
+echo -e "追加新转发规则（TCP + UDP），${BOLD}监听端口直接回车${RESET}结束。"
 echo ""
 
-index=$(( ${#RULES[@]} + 1 ))
+index=1
 while true; do
     echo -e "${BOLD}── 新规则 #${index} ──${RESET}"
 
-    # 监听端口
     while true; do
         prompt "本机监听端口（回车结束）："
         read -r LISTEN_PORT
         [[ -z "$LISTEN_PORT" ]] && {
-            (( ${#RULES[@]} > 0 )) && break 2
-            warn "至少需要一条规则！"
+            (( ${#NEW_RULES[@]} > 0 )) && break 2
+            warn "至少需要一条新规则！"
             continue
         }
         is_valid_port "$LISTEN_PORT" && break
         warn "端口无效（1-65535）"
     done
 
-    # 目标 IP
     while true; do
         prompt "目标 IP 地址："
         read -r DEST_IP
@@ -118,7 +100,6 @@ while true; do
         warn "IP 格式不正确（例如：1.2.3.4）"
     done
 
-    # 目标端口
     while true; do
         prompt "目标端口 [默认: ${LISTEN_PORT}]："
         read -r DEST_PORT
@@ -127,78 +108,89 @@ while true; do
         warn "端口无效（1-65535）"
     done
 
-    RULES+=("${LISTEN_PORT} ${DEST_IP} ${DEST_PORT}")
+    NEW_RULES+=("${LISTEN_PORT} ${DEST_IP} ${DEST_PORT}")
     success "已添加：*:${LISTEN_PORT} → ${DEST_IP}:${DEST_PORT}（TCP + UDP）"
     echo ""
     (( index++ ))
 done
 
-# ── 备份旧配置 ────────────────────
-if [[ -f "$NFT_CONF" ]]; then
-    cp "$NFT_CONF" "${NFT_CONF}.bak.$(date +%Y%m%d%H%M%S)"
-    info "已备份旧配置"
-fi
+# ────────────────────────────────
+#  备份
+# ────────────────────────────────
+cp "$NFT_CONF" "${NFT_CONF}.bak.$(date +%Y%m%d%H%M%S)"
+info "已备份旧配置"
 
-# ── 写入新配置文件（逐行输出，避免命令替换剥掉尾部换行）──
+# ────────────────────────────────
+#  将新规则插入配置文件
+#  原理：逐行读取，在 chain prerouting / chain postrouting
+#        的结尾 } 之前插入对应规则行
+# ────────────────────────────────
 info "写入 ${NFT_CONF} ..."
 
-{
-    echo "flush ruleset"
-    echo "table inet filter {"
-    echo "        chain input {"
-    echo "                type filter hook input priority filter; policy accept;"
-    echo "        }"
-    echo ""
-    echo "        chain forward {"
-    echo "                type filter hook forward priority filter; policy accept;"
-    echo "        }"
-    echo ""
-    echo "        chain output {"
-    echo "                type filter hook output priority filter; policy accept;"
-    echo "        }"
-    echo "}"
-    echo "table ip nat {"
-    echo "        chain prerouting {"
-    echo "                type nat hook prerouting priority dstnat; policy accept;"
-    for rule in "${RULES[@]}"; do
-        read -r lport dip dport <<< "$rule"
-        echo "                tcp dport ${lport} dnat to ${dip}:${dport}"
-        echo "                udp dport ${lport} dnat to ${dip}:${dport}"
-    done
-    echo "        }"
-    echo ""
-    echo "        chain postrouting {"
-    echo "                type nat hook postrouting priority srcnat; policy accept;"
-    declare -A SEEN_IPS
-    for rule in "${RULES[@]}"; do
-        read -r lport dip dport <<< "$rule"
-        if [[ -z "${SEEN_IPS[$dip]+x}" ]]; then
-            echo "                ip daddr ${dip} masquerade"
-            SEEN_IPS[$dip]=1
-        fi
-    done
-    echo "        }"
-    echo "}"
-} > "$NFT_CONF"
+tmp=$(mktemp)
+in_pre=0
+in_post=0
+declare -A SEEN_IPS
 
+while IFS= read -r line; do
+    # 检测链开始
+    if [[ "$line" =~ chain[[:space:]]prerouting ]]; then
+        in_pre=1; in_post=0
+    elif [[ "$line" =~ chain[[:space:]]postrouting ]]; then
+        in_pre=0; in_post=1
+    fi
 
-# ── 加载配置 ──────────────────────
+    # 在 prerouting 的 } 前插入 dnat 规则
+    if (( in_pre )) && [[ "$line" == "        }" ]]; then
+        for rule in "${NEW_RULES[@]}"; do
+            read -r lport dip dport <<< "$rule"
+            echo "                tcp dport ${lport} dnat to ${dip}:${dport}"
+            echo "                udp dport ${lport} dnat to ${dip}:${dport}"
+        done
+        in_pre=0
+    fi
+
+    # 在 postrouting 的 } 前插入 masquerade 规则（同一 IP 只加一条）
+    if (( in_post )) && [[ "$line" == "        }" ]]; then
+        for rule in "${NEW_RULES[@]}"; do
+            read -r lport dip dport <<< "$rule"
+            if [[ -z "${SEEN_IPS[$dip]+x}" ]]; then
+                # 只在该 IP 的 masquerade 规则尚不存在时才添加
+                if ! grep -q "ip daddr ${dip} masquerade" "$NFT_CONF"; then
+                    echo "                ip daddr ${dip} masquerade"
+                fi
+                SEEN_IPS[$dip]=1
+            fi
+        done
+        in_post=0
+    fi
+
+    echo "$line"
+done < "$NFT_CONF" > "$tmp"
+
+mv "$tmp" "$NFT_CONF"
+success "配置文件已更新"
+
+# ────────────────────────────────
+#  加载配置
+# ────────────────────────────────
 info "加载配置：nft -f ${NFT_CONF}"
 nft -f "$NFT_CONF"
 success "配置已生效"
 
-# ── 开机自启 ──────────────────────
 systemctl enable nftables &>/dev/null
 success "nftables.service 已设置开机自启"
 
-# ── 摘要 ──────────────────────────
+# ────────────────────────────────
+#  摘要
+# ────────────────────────────────
 echo ""
 echo -e "${GREEN}══════════════════════════════════════════${RESET}"
-echo -e "${GREEN}  完成 ✔  （共 ${#RULES[@]} 条转发规则）${RESET}"
+echo -e "${GREEN}  完成 ✔  （本次新增 ${#NEW_RULES[@]} 条规则）${RESET}"
 echo -e "${GREEN}══════════════════════════════════════════${RESET}"
 printf "\n  ${BOLD}%-12s  %-24s  %s${RESET}\n" "监听端口" "目标地址" "协议"
 printf "  %s\n" "────────────────────────────────────────"
-for rule in "${RULES[@]}"; do
+for rule in "${NEW_RULES[@]}"; do
     read -r lport dip dport <<< "$rule"
     printf "  %-12s  %-24s  %s\n" "*:${lport}" "${dip}:${dport}" "TCP + UDP"
 done
