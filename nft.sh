@@ -58,6 +58,33 @@ is_valid_port() {
     [[ "$1" =~ ^[0-9]+$ ]] && (( $1 >= 1 && $1 <= 65535 ))
 }
 
+# 将域名/IP 解析为 IP，成功则将结果写入 RESOLVED_IP 并返回 0
+resolve_host() {
+    local host="$1"
+    RESOLVED_IP=""
+    # 若本身已是合法 IP，直接返回
+    if is_valid_ip "$host"; then
+        RESOLVED_IP="$host"
+        return 0
+    fi
+    # 尝试 getent（glibc 标准工具，不依赖 dig）
+    local res
+    res=$(getent hosts "$host" 2>/dev/null | awk '{print $1}' | head -1)
+    if [[ -n "$res" ]]; then
+        RESOLVED_IP="$res"
+        return 0
+    fi
+    # 回退到 dig（需安装 dnsutils）
+    if command -v dig &>/dev/null; then
+        res=$(dig +short +timeout=3 +tries=1 "$host" A 2>/dev/null | grep -E '^[0-9]+\.' | head -1)
+        if [[ -n "$res" ]]; then
+            RESOLVED_IP="$res"
+            return 0
+        fi
+    fi
+    return 1
+}
+
 # ────────────────────────────────
 #  从配置文件解析已有规则 → RULES[]
 #  格式: "listen_port dest_ip dest_port"
@@ -183,10 +210,17 @@ while true; do
             done
 
             while true; do
-                prompt "目标 IP 地址："
-                read -r DEST_IP
-                is_valid_ip "$DEST_IP" && break
-                warn "IP 格式不正确（例如：1.2.3.4）"
+                prompt "目标地址（IP 或域名）："
+                read -r DEST_HOST
+                [[ -z "$DEST_HOST" ]] && { warn "目标地址不能为空"; continue; }
+                if resolve_host "$DEST_HOST"; then
+                    DEST_IP="$RESOLVED_IP"
+                    # 若输入的是域名，额外显示解析结果
+                    [[ "$DEST_HOST" != "$DEST_IP" ]] && info "域名解析：${DEST_HOST} → ${DEST_IP}"
+                    break
+                else
+                    warn "无法解析地址：${DEST_HOST}（请检查域名或网络）"
+                fi
             done
 
             while true; do
