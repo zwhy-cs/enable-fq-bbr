@@ -168,7 +168,6 @@ write_conf() {
         echo "}"
     } >> "$tmp"
 
-    cp "$NFT_CONF" "${NFT_CONF}.bak.$(date +%Y%m%d%H%M%S)"
     mv "$tmp" "$NFT_CONF"
 }
 
