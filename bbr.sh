@@ -36,6 +36,7 @@ net.ipv4.tcp_rmem = 4096 87380 16777216
 net.core.rmem_max = 16777216
 net.core.wmem_max = 16777216
 net.ipv4.tcp_slow_start_after_idle=0
+net.ipv4.ip_forward = 1
 EOF
 # 使 sysctl 配置生效
 sysctl -p
