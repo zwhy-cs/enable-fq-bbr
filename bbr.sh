@@ -1,5 +1,5 @@
 sed -i 's/^#precedence ::ffff:0:0\/96  100/precedence ::ffff:0:0\/96  100/' /etc/gai.conf
-
+echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf
 #####################
 # 修改 DNS 配置部分 #
 #####################
@@ -37,9 +37,6 @@ net.core.rmem_max = 16777216
 net.core.wmem_max = 16777216
 net.ipv4.tcp_slow_start_after_idle=0
 net.ipv4.ip_forward = 1
-net.ipv6.conf.all.disable_ipv6 = 1
-net.ipv6.conf.default.disable_ipv6 = 1
-net.ipv6.conf.lo.disable_ipv6 = 1
 EOF
 # 使 sysctl 配置生效
 sysctl -p
