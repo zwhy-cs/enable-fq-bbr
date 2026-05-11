@@ -39,7 +39,7 @@ install_dependencies() {
 
 # 1. 基础安装 v2node
 install_v2node() {
-    wget -N https://raw.githubusercontent.com/wyx2685/v2node/master/script/install.sh && bash install.sh
+    wget -N https://raw.githubusercontent.com/zwhy-cs/v2node/master/script/install.sh && bash install.sh
 }
 
 # 加载数据
