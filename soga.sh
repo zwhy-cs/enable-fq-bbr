@@ -464,7 +464,7 @@ delete_soga_instance() {
   fi
 
   echo ">>> 正在停止并删除 Soga 服务 ($instance_name)..."
-  docker compose -f "$COMPOSE_FILE" down --rmi all -v --remove-orphans || echo "处理 $COMPOSE_FILE 时出错，但将继续。"
+  docker compose -f "$COMPOSE_FILE" down -v --remove-orphans || echo "处理 $COMPOSE_FILE 时出错，但将继续。"
 
   echo ">>> 正在删除 Soga 配置目录..."
   local soga_instance_dir
