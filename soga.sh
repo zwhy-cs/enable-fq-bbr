@@ -261,7 +261,7 @@ services:
     restart: always
     network_mode: host
     volumes:
-      - /etc/soga/$service_name/:/etc/soga/
+      - /etc/soga/$service_name:/etc/soga
     environment:
       - type=xboard
       - server_type=$server_type
