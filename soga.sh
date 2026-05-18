@@ -251,7 +251,7 @@ install_soga() {
   soga_version=${soga_version:-latest}
   echo "node_id 将留空，请使用"添加节点"功能添加。"
 
-  mkdir -p "$SOGA_DIR/$service_name"
+  mkdir -p "$SOGA_DIR/$service_name/data"
   COMPOSE_FILE="$SOGA_DIR/$service_name/docker-compose.yml"
   cat > "$COMPOSE_FILE" <<EOF
 services:
@@ -261,7 +261,7 @@ services:
     restart: always
     network_mode: host
     volumes:
-      - /etc/soga/$service_name:/etc/soga
+      - /etc/soga/$service_name/data:/etc/soga
     environment:
       - type=xboard
       - server_type=$server_type
@@ -429,19 +429,29 @@ update_soga() {
   echo " >>> 更新 Soga..."
   if ! enable_choose_compose; then read -p "按回车键返回菜单..." _; return; fi
 
-  echo "当前镜像: $(grep -oP 'image: \K[^ ]*' "$COMPOSE_FILE")"
+  local current_image
+  current_image=$(awk '/^[[:space:]]*image:/ {print $2; exit}' "$COMPOSE_FILE")
+  echo "当前镜像: $current_image"
   read -p "请输入新的 Soga 版本 (留空以拉取当前版本最新镜像, 输入 'latest' 使用最新版): " new_version
 
   if [ -n "$new_version" ]; then
-    sed -i "s|image: .*|image: vaxilu/soga:$new_version|" "$COMPOSE_FILE"
+    sed -i "/^[[:space:]]*image:[[:space:]]*/s|image:.*|image: vaxilu/soga:$new_version|" "$COMPOSE_FILE"
     echo "镜像已更新为 vaxilu/soga:$new_version"
   fi
 
   echo "正在拉取 Soga 镜像..."
-  docker compose -f "$COMPOSE_FILE" pull
+  if ! docker compose -f "$COMPOSE_FILE" pull; then
+    echo "错误：拉取镜像失败，请检查网络或版本号。"
+    read -p "按回车键返回菜单..." _
+    return
+  fi
   
   echo "正在重启服务..."
-  docker compose -f "$COMPOSE_FILE" up -d
+  if ! docker compose -f "$COMPOSE_FILE" up -d; then
+    echo "错误：重启服务失败。"
+    read -p "按回车键返回菜单..." _
+    return
+  fi
   
   echo "Soga 更新操作完成。"
   read -p "按回车键返回菜单..." _
