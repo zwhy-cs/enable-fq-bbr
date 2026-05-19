@@ -26,12 +26,25 @@ prompt()  { printf "${BOLD}${YELLOW}>>> $*${RESET} "; }
 # ────────────────────────────────
 [[ $EUID -eq 0 ]] || error "请以 root 身份运行（sudo bash $0）"
 command -v nft &>/dev/null || error "未找到 nft，请先安装：apt install nftables"
-[[ -f "$NFT_CONF" ]] || error "${NFT_CONF} 不存在"
+# 直接覆盖为初始基础配置
+warn "正在覆盖初始化 ${NFT_CONF} 基础配置..."
+cat > "$NFT_CONF" << 'EOF'
+#!/usr/sbin/nft -f
 
-# 若文件中没有 table ip nat，则追加基础结构
-if ! grep -q "table ip nat" "$NFT_CONF"; then
-    warn "${NFT_CONF} 中未找到 table ip nat，自动追加基础配置..."
-    cat >> "$NFT_CONF" << 'EOF'
+flush chain ip nat prerouting
+flush chain ip nat postrouting
+
+table inet filter {
+        chain input {
+                type filter hook input priority 0;
+        }
+        chain forward {
+                type filter hook forward priority 0;
+        }
+        chain output {
+                type filter hook output priority 0;
+        }
+}
 table ip nat {
         chain prerouting {
                 type nat hook prerouting priority dstnat; policy accept;
@@ -42,8 +55,7 @@ table ip nat {
         }
 }
 EOF
-    success "已追加 table ip nat 基础配置"
-fi
+success "已初始化并覆盖 ${NFT_CONF} 基础配置"
 
 # ────────────────────────────────
 #  输入验证
@@ -267,7 +279,8 @@ while true; do
         info "写入 ${NFT_CONF} ..."
         write_conf
         success "配置文件已更新"
-        nft flush ruleset
+        nft flush chain ip nat prerouting 2>/dev/null || true
+        nft flush chain ip nat postrouting 2>/dev/null || true
         sleep 1
         nft -f /etc/nftables.conf
         systemctl is-enabled nftables &>/dev/null || systemctl enable nftables
