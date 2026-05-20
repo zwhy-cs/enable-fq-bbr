@@ -26,9 +26,10 @@ prompt()  { printf "${BOLD}${YELLOW}>>> $*${RESET} "; }
 # ────────────────────────────────
 [[ $EUID -eq 0 ]] || error "请以 root 身份运行（sudo bash $0）"
 command -v nft &>/dev/null || error "未找到 nft，请先安装：apt install nftables"
-# 直接覆盖为初始基础配置
-warn "正在覆盖初始化 ${NFT_CONF} 基础配置..."
-cat > "$NFT_CONF" << 'EOF'
+# 如果配置文件不存在，或不包含 table ip nat，则初始化基础配置
+if [[ ! -f "$NFT_CONF" ]] || ! grep -q "table ip nat" "$NFT_CONF"; then
+    warn "${NFT_CONF} 不存在或未配置 table ip nat，正在初始化基础配置..."
+    cat > "$NFT_CONF" << 'EOF'
 #!/usr/sbin/nft -f
 
 flush chain ip nat prerouting
@@ -55,7 +56,8 @@ table ip nat {
         }
 }
 EOF
-success "已初始化并覆盖 ${NFT_CONF} 基础配置"
+    success "已初始化 ${NFT_CONF} 基础配置"
+fi
 
 # ────────────────────────────────
 #  输入验证
