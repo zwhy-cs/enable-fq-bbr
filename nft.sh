@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================
 #  nft.sh
-#  管理 /etc/nftables.conf 中 table ip nat 的端口转发规则
+#  管理 /etc/nftables.conf 中自定义 nftables 表的端口转发规则
 #  支持：列表显示、按序号添加/删除
 #  用法：sudo bash nft.sh
 # ============================================================
@@ -9,6 +9,8 @@
 set -euo pipefail
 
 NFT_CONF="/etc/nftables.conf"
+# 自定义 nftables 表名，避免与 Docker 默认的 table ip nat 冲突
+TABLE_NAME="custom_nat"
 
 # ────────────────────────────────
 #  颜色输出
@@ -26,18 +28,16 @@ prompt()  { printf "${BOLD}${YELLOW}>>> $*${RESET} "; }
 # ────────────────────────────────
 [[ $EUID -eq 0 ]] || error "请以 root 身份运行（sudo bash $0）"
 command -v nft &>/dev/null || error "未找到 nft，请先安装：apt install nftables"
-# 如果配置文件不存在，或不包含 table ip nat，则初始化基础配置
-if [[ ! -f "$NFT_CONF" ]] || ! grep -q "table ip nat" "$NFT_CONF"; then
-    warn "${NFT_CONF} 不存在或未配置 table ip nat，正在初始化基础配置..."
-    cat > "$NFT_CONF" << 'EOF'
+# 如果配置文件不存在，或不包含自定义的 table ip ${TABLE_NAME}，则初始化基础配置
+if [[ ! -f "$NFT_CONF" ]] || ! grep -q "table ip ${TABLE_NAME}" "$NFT_CONF"; then
+    warn "${NFT_CONF} 不存在或未配置 table ip ${TABLE_NAME}，正在初始化基础配置..."
+    cat > "$NFT_CONF" << EOF
 #!/usr/sbin/nft -f
-
-flush chain ip nat prerouting
-flush chain ip nat postrouting
 
 table inet filter {
         chain input {
                 type filter hook input priority 0;
+            # 放行本地回环、已建立连接等常规过滤可在下面扩充
         }
         chain forward {
                 type filter hook forward priority 0;
@@ -46,7 +46,8 @@ table inet filter {
                 type filter hook output priority 0;
         }
 }
-table ip nat {
+
+table ip ${TABLE_NAME} {
         chain prerouting {
                 type nat hook prerouting priority dstnat; policy accept;
         }
@@ -136,21 +137,25 @@ print_rules() {
 
 # ────────────────────────────────
 #  将 RULES[] 写回 /etc/nftables.conf
-#  保留 table inet filter 及其前内容，重建 table ip nat
+#  保留自定义 table 之前的所有内容，重建自定义 table
 # ────────────────────────────────
 write_conf() {
     local tmp
     tmp="$(mktemp)"
 
-    # 保留 table ip nat 之前的所有内容
+    # 保留自定义 table ip ${TABLE_NAME} 之前的所有内容
     while IFS= read -r line; do
-        [[ "$line" =~ ^table[[:space:]]ip[[:space:]]nat ]] && break
+        [[ "$line" =~ ^table[[:space:]]ip[[:space:]]${TABLE_NAME} ]] && break
         echo "$line"
     done < "$NFT_CONF" > "$tmp"
 
-    # 写入新的 table ip nat 块
+    # 写入新的自定义 NAT 表
     {
-        echo "table ip nat {"
+        # 先声明再删除，以保证幂等清理内核中旧表及旧规则，随后重建
+        echo "table ip ${TABLE_NAME}"
+        echo "delete table ip ${TABLE_NAME}"
+        echo ""
+        echo "table ip ${TABLE_NAME} {"
         echo "        chain prerouting {"
         echo "                type nat hook prerouting priority dstnat; policy accept;"
         for rule in "${RULES[@]}"; do
@@ -281,17 +286,24 @@ while true; do
         info "写入 ${NFT_CONF} ..."
         write_conf
         success "配置文件已更新"
-        nft flush chain ip nat prerouting 2>/dev/null || true
-        nft flush chain ip nat postrouting 2>/dev/null || true
-        sleep 1
-        nft -f /etc/nftables.conf
+        
+        # 清理一次内核中的旧表防止语法加载错误，再执行重载
+        nft delete table ip "${TABLE_NAME}" 2>/dev/null || true
+        sleep 0.5
+        
+        if nft -f "$NFT_CONF"; then
+            success "nftables 规则已成功应用到内核"
+        else
+            error "应用 nftables 规则失败，请检查配置文件语法"
+        fi
+        
         systemctl is-enabled nftables &>/dev/null || systemctl enable nftables
         echo ""
         echo -e "${GREEN}══════════════════════════════════════════${RESET}"
         echo -e "${GREEN}  完成 ✔  （共 ${#RULES[@]} 条规则）${RESET}"
         echo -e "${GREEN}══════════════════════════════════════════${RESET}"
         print_rules
-        echo -e "  查看规则  : ${YELLOW}nft list table ip nat${RESET}"
+        echo -e "  查看规则  : ${YELLOW}nft list table ip ${TABLE_NAME}${RESET}"
         echo -e "  当前配置  : ${YELLOW}cat ${NFT_CONF}${RESET}"
         echo ""
         exit 0
