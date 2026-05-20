@@ -199,16 +199,18 @@ while true; do
     print_rules
 
     # ── 操作菜单 ──
-    echo -e "  ${BOLD}[A]${RESET} 添加规则   ${BOLD}[D]${RESET} 删除规则   ${BOLD}[Q]${RESET} 保存并退出"
+    echo -e "  ${BOLD}[1]${RESET} 添加规则"
+    echo -e "  ${BOLD}[2]${RESET} 删除规则"
+    echo -e "  ${BOLD}[3]${RESET} 保存并应用"
+    echo -e "  ${BOLD}[0]${RESET} 直接退出"
     echo ""
-    prompt "请选择操作 [A/D/Q]："
+    prompt "请选择操作 [1/2/3/0]："
     read -r ACTION
-    ACTION="${ACTION^^}"   # 转大写
     echo ""
 
     case "$ACTION" in
     # ── 添加 ──────────────────────────────────────────
-    A)
+    1)
         while true; do
             echo -e "${BOLD}── 添加规则 ──${RESET}"
 
@@ -249,7 +251,7 @@ while true; do
         ;;
 
     # ── 删除 ──────────────────────────────────────────
-    D)
+    2)
         if (( ${#RULES[@]} == 0 )); then
             warn "当前没有可删除的规则"
             continue
@@ -282,7 +284,7 @@ while true; do
         ;;
 
     # ── 保存退出 ──────────────────────────────────────
-    Q)
+    3)
         info "写入 ${NFT_CONF} ..."
         write_conf
         success "配置文件已更新"
@@ -309,8 +311,15 @@ while true; do
         exit 0
         ;;
 
+    # ── 直接退出 ──────────────────────────────────────
+    0)
+        info "已退出，未作任何修改。"
+        echo ""
+        exit 0
+        ;;
+
     *)
-        warn "无效输入，请输入 A、D 或 Q"
+        warn "无效输入，请输入 1、2、3 或 0"
         ;;
     esac
 done
