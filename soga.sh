@@ -265,7 +265,6 @@ services:
     environment:
       - type=xboard
       - server_type=$server_type
-      - soga_key=
       - api=webapi
       - webapi_url=$webapi_url
       - webapi_key=$webapi_key
@@ -273,7 +272,7 @@ services:
       - forbidden_bit_torrent=false
       - log_level=debug
       - default_dns=8.8.8.8,8.8.4.4
-      - dns_strategy=ipv4_only
+      - dns_strategy=ipv4_first
 EOF
 
   echo "配置文件已生成：$COMPOSE_FILE"
