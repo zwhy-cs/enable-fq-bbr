@@ -265,6 +265,7 @@ services:
     environment:
       - type=xboard
       - server_type=$server_type
+      - soga_key=
       - api=webapi
       - webapi_url=$webapi_url
       - webapi_key=$webapi_key
