@@ -10,6 +10,8 @@ set -euo pipefail
 CONF_FILE="/etc/systemd/resolved.conf"
 RESOLV_LINK="/etc/resolv.conf"
 STUB_FILE="/run/systemd/resolve/stub-resolv.conf"
+DHCLIENT_HOOK_DIR="/etc/dhcp/dhclient-enter-hooks.d"
+DHCLIENT_HOOK_FILE="${DHCLIENT_HOOK_DIR}/nodnsupdate"
 
 echo "==> 检查当前状态..."
 
@@ -33,9 +35,6 @@ DNS=8.8.8.8#dns.google
 FallbackDNS=8.8.4.4#dns.google
 DNSOverTLS=yes
 DNSSEC=no
-Cache=yes
-DNSStubListener=yes
-ReadEtcHosts=yes
 EOF
 
 # 4. 链路 resolv.conf → stub
@@ -46,6 +45,13 @@ if [ "$(readlink -f "$RESOLV_LINK" 2>/dev/null)" != "$STUB_FILE" ]; then
 else
     echo "==> resolv.conf 已是 stub 模式，跳过"
 fi
+
+mkdir -p "$DHCLIENT_HOOK_DIR"
+cat > "$DHCLIENT_HOOK_FILE" << 'EOF'
+#!/bin/sh
+make_resolv_conf() { :; }
+EOF
+chmod +x "$DHCLIENT_HOOK_FILE"
 
 # 5. 重启服务
 echo "==> 重启 systemd-resolved..."
@@ -69,13 +75,3 @@ echo ""
 echo "[resolvectl status]"
 resolvectl status
 echo ""
-
-echo "[DNS 解析测试]"
-for domain in baidu.com www.nodeseek.com; do
-    result=$(resolvectl query "$domain" 2>&1)
-    if echo "$result" | grep -qE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'; then
-        echo "  ✓ $domain — OK"
-    else
-        echo "  ✗ $domain — FAILED: $(echo "$result" | head -1)"
-    fi
-done
