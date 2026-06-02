@@ -17,6 +17,7 @@ fi
 # 1. 确保 systemd-resolved 已开启并运行
 if ! systemctl is-active --quiet systemd-resolved; then
     echo "==> 启动并启用 systemd-resolved..."
+    systemctl unmask systemd-resolved
     systemctl enable --now systemd-resolved
 fi
 # 2. 写入 /etc/systemd/resolved.conf
