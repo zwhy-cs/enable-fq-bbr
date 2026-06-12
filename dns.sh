@@ -41,10 +41,9 @@ echo "==> 写入 systemd-resolved 局部配置..."
 mkdir -p "$CONF_DIR"
 cat > "$CONF_FILE" << 'EOF'
 [Resolve]
-DNS=8.8.8.8#dns.google
-FallbackDNS=8.8.4.4#dns.google
+DNS=8.8.8.8#dns.google 8.8.4.4#dns.google
 Domains=~.
-DNSOverTLS=opportunistic
+DNSOverTLS=yes
 DNSSEC=no
 EOF
 
