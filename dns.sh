@@ -9,34 +9,10 @@ STUB_FILE="/run/systemd/resolve/stub-resolv.conf"
 DHCLIENT_HOOK_DIR="/etc/dhcp/dhclient-enter-hooks.d"
 DHCLIENT_HOOK_FILE="${DHCLIENT_HOOK_DIR}/nodnsupdate"
 
-echo "==> 检查并安装 systemd-resolved..."
-if ! command -v resolvectl &> /dev/null; then
-    if command -v apt-get &> /dev/null; then
-        echo "==> 未检测到 systemd-resolved，正在通过 apt 安装..."
-        apt-get update
-        apt-get install -y systemd-resolved
-    elif command -v dnf &> /dev/null; then
-        echo "==> 未检测到 systemd-resolved，正在通过 dnf 安装..."
-        dnf install -y systemd-resolved
-    else
-        echo "==> [警告] 未检测到支持的包管理器，请确保已手动安装 systemd-resolved。"
-    fi
-fi
+apt install -y systemd-resolved
 
-# 1. 确保 systemd-resolved 已开启并运行
-if systemctl list-unit-files | grep -q systemd-resolved; then
-    echo "==> 启动并启用 systemd-resolved..."
-    systemctl unmask systemd-resolved 2>/dev/null || true
-    systemctl enable --now systemd-resolved
-else
-    echo "==> [错误] 系统中未检测到 systemd-resolved 服务。" >&2
-    exit 1
-fi
+systemctl enable --now systemd-resolved
 
-# 2. 写入 drop-in 配置（增量配置，不覆盖全局设置）
-# 注：
-# - Domains=~. 确保全局 DNS 的路由优先级最高，彻底屏蔽 DHCP 带来的局域网 DNS 干扰
-# - DNSOverTLS 改为 opportunistic（机会性加密）。如果 853 端口被封锁，会自动平滑降级到普通 53 端口，避免全机断网
 echo "==> 写入 systemd-resolved 局部配置..."
 mkdir -p "$CONF_DIR"
 cat > "$CONF_FILE" << 'EOF'
