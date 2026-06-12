@@ -9,8 +9,6 @@ STUB_FILE="/run/systemd/resolve/stub-resolv.conf"
 DHCLIENT_HOOK_DIR="/etc/dhcp/dhclient-enter-hooks.d"
 DHCLIENT_HOOK_FILE="${DHCLIENT_HOOK_DIR}/nodnsupdate"
 
-apt install -y systemd-resolved
-
 systemctl enable --now systemd-resolved
 
 echo "==> 写入 systemd-resolved 局部配置..."
