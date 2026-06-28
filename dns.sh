@@ -16,7 +16,7 @@ echo "==> 写入 systemd-resolved 局部配置..."
 mkdir -p "$CONF_DIR"
 cat > "$CONF_FILE" << 'EOF'
 [Resolve]
-DNS=8.8.8.8#dns.google 8.8.4.4#dns.google
+DNS=1.1.1.1#cloudflare-dns.com 1.0.0.1#cloudflare-dns.com
 Domains=~.
 DNSOverTLS=yes
 DNSSEC=no
