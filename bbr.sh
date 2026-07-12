@@ -86,7 +86,7 @@ mv tcping /usr/local/bin/
 chmod +x /usr/local/bin/tcping
 echo "所有操作执行完毕！"
 
-(crontab -l 2>/dev/null; echo '0 6 * * * /sbin/reboot'; echo '@reboot sleep 5 && echo "0" | /usr/local/bin/dog') | crontab -
+(crontab -l 2>/dev/null; echo '0 6 * * * /sbin/reboot') | crontab -
 
 # cat << 'EOF' > /usr/local/bin/set-fq.sh
 # #!/bin/bash
