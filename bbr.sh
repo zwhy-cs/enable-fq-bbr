@@ -28,7 +28,10 @@ systemctl enable --now systemd-timesyncd
 ##############################
 # 修改 sysctl 配置（fq、bbr） #
 ##############################
-cat <<EOF > /etc/sysctl.conf
+read -p "是否写入完整 sysctl 配置（含缓冲区调优）？(y/n): " sysctl_choice
+if [[ "$sysctl_choice" =~ ^[Yy]$ ]]; then
+    # 完整配置
+    cat <<EOF > /etc/sysctl.conf
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 net.ipv4.tcp_wmem = 4096 16384 16777216
@@ -37,6 +40,13 @@ net.core.rmem_max = 16777216
 net.core.wmem_max = 16777216
 # net.ipv4.tcp_slow_start_after_idle=0
 EOF
+else
+    # 仅 fq、bbr
+    cat <<EOF > /etc/sysctl.conf
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+EOF
+fi
 # 使 sysctl 配置生效
 sysctl -p
 echo "sysctl 配置已覆盖并生效！"
