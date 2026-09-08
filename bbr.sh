@@ -28,54 +28,19 @@ systemctl enable --now systemd-timesyncd
 ##############################
 # 修改 sysctl 配置（fq、bbr） #
 ##############################
-read -p "是否写入完整 sysctl 配置（含缓冲区调优）？(y/n): " sysctl_choice
-if [[ "$sysctl_choice" =~ ^[Yy]$ ]]; then
-    # 完整配置
-    cat <<EOF > /etc/sysctl.conf
+cat <<EOF > /etc/sysctl.conf
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 net.ipv4.tcp_wmem = 4096 16384 16777216
 net.ipv4.tcp_rmem = 4096 87380 16777216
 net.core.rmem_max = 16777216
 net.core.wmem_max = 16777216
-# net.ipv4.tcp_slow_start_after_idle=0
 EOF
-else
-    # 仅 fq、bbr
-    cat <<EOF > /etc/sysctl.conf
-net.core.default_qdisc = fq
-net.ipv4.tcp_congestion_control = bbr
-EOF
-fi
-# 使 sysctl 配置生效
+
+sleep 1
+
 sysctl -p
 echo "sysctl 配置已覆盖并生效！"
-
-#######################################
-# 修改 MTU 配置 (可选)                #
-#######################################
-# read -p "是否需要修改网卡 MTU 为 1400？(y/n, 默认 n): " config_mtu
-# if [[ "$config_mtu" =~ ^[Yy]$ ]]; then
-#     # 获取默认出口网卡名称
-#     MAIN_INTERFACE=$(ip route get 8.8.8.8 | grep -oP 'dev \K\S+')
-#     if [ -n "$MAIN_INTERFACE" ]; then
-#         if [ -f /etc/network/interfaces ]; then
-#             if grep -q "mtu 1400" /etc/network/interfaces; then
-#                 echo "MTU 1400 配置已在 /etc/network/interfaces 中。"
-#                 ip link set dev $MAIN_INTERFACE mtu 1400
-#                 echo "已确保接口 $MAIN_INTERFACE 的 MTU 1400 立即生效。"
-#             else
-#                 sed -i "/iface $MAIN_INTERFACE/a \    mtu 1400" /etc/network/interfaces
-#                 ip link set dev $MAIN_INTERFACE mtu 1400
-#                 echo "已为网卡 $MAIN_INTERFACE 成功添加并立即生效 MTU 1400 配置。"
-#             fi
-#         else
-#             echo "未找到 /etc/network/interfaces 文件，无法自动修改 MTU。"
-#         fi
-#     else
-#         echo "未发现默认网卡，无法自动配置 MTU。"
-#     fi
-# fi
 
 #######################################
 # 执行 nxtrace 远程脚本（可选操作） #
@@ -98,41 +63,6 @@ echo "所有操作执行完毕！"
 
 (crontab -l 2>/dev/null; echo '0 6 * * * /sbin/reboot') | crontab -
 
-# cat << 'EOF' > /usr/local/bin/set-fq.sh
-# #!/bin/bash
-# IFACE=$(ip route show default | awk '/default/ {print $5}' | head -n1)
-# if [ -n "$IFACE" ]; then
-#     echo "Applying settings to interface: $IFACE"
-#     ip link set dev "$IFACE" mtu 1400
-#     /sbin/tc qdisc replace dev "$IFACE" root fq
-#     echo "Successfully set MTU to 1400 and applied FQ on $IFACE."
-# else
-#     echo "Error: No default interface found."
-#     exit 1
-# fi
-# EOF
-
-# chmod +x /usr/local/bin/set-fq.sh
-
-# cat << 'EOF' > /etc/systemd/system/ensure-fq.service
-# [Unit]
-# Description=Force FQ Qdisc on Default Interface
-# After=network-online.target
-# Wants=network-online.target
-
-# [Service]
-# Type=oneshot
-# # 延迟 10 秒确保云厂商的初始化脚本已经跑完
-# ExecStartPre=/usr/bin/sleep 10
-# ExecStart=/usr/local/bin/set-fq.sh
-# RemainAfterExit=yes
-
-# [Install]
-# WantedBy=multi-user.target
-# EOF
-
-# systemctl daemon-reload
-# systemctl enable ensure-fq.service
-# systemctl start ensure-fq.service
+sleep 5
 
 reboot
