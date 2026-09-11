@@ -20,7 +20,9 @@ chattr +i /etc/resolv.conf || true
 # 安装必要软件包（使用 apt-get 安装） #
 ##########################################
 echo "开始安装必要的软件包..."
-apt update && apt install -y iperf3 unzip wget nano dnsutils python3 jq
+apt-get update && \
+apt-get install -y unzip wget nano dnsutils python3 jq && \
+DEBIAN_FRONTEND=noninteractive apt-get install -y iperf3
 apt install systemd-timesyncd -y
 systemctl enable --now systemd-timesyncd
 
@@ -46,8 +48,8 @@ echo "sysctl 配置已覆盖并生效！"
 # 执行 nxtrace 远程脚本（可选操作） #
 #######################################
 echo "开始执行 nxtrace 脚本..."
-until timeout 5 bash -c 'curl -sL nxtrace.org/nt | bash'; do
-    echo "脚本执行超过 5 秒，重新执行..."
+until timeout 10 bash -c 'curl -sL nxtrace.org/nt | bash'; do
+    echo "脚本执行超过 10 秒，重新执行..."
 done
 
 ########################
