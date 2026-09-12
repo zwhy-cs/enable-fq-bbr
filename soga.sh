@@ -262,6 +262,8 @@ services:
     network_mode: host
     volumes:
       - /etc/soga/$service_name/data:/etc/soga
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     environment:
       - type=xboard
       - server_type=$server_type
