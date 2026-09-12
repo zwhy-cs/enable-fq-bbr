@@ -262,9 +262,9 @@ services:
     network_mode: host
     volumes:
       - /etc/soga/$service_name/data:/etc/soga
-      - /etc/localtime:/etc/localtime:ro
-      - /etc/timezone:/etc/timezone:ro
+      - /usr/share/zoneinfo/Asia/Singapore:/etc/localtime:ro
     environment:
+      - TZ=Asia/Singapore
       - type=xboard
       - server_type=$server_type
       - api=webapi
