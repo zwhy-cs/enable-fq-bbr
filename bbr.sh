@@ -23,6 +23,7 @@ echo "开始安装必要的软件包..."
 apt-get update && \
 apt-get install -y unzip wget nano dnsutils python3 jq && \
 DEBIAN_FRONTEND=noninteractive apt-get install -y iperf3
+sudo timedatectl set-timezone Asia/Singapore
 apt install systemd-timesyncd -y
 systemctl enable --now systemd-timesyncd
 
