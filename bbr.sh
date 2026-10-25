@@ -1,5 +1,5 @@
 sed -i 's/^#precedence ::ffff:0:0\/96  100/precedence ::ffff:0:0\/96  100/' /etc/gai.conf
-echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf
+echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4
 #####################
 # 修改 DNS 配置部分 #
 #####################
