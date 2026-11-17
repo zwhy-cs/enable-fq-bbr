@@ -64,6 +64,7 @@ mv tcping /usr/local/bin/
 chmod +x /usr/local/bin/tcping
 echo "所有操作执行完毕！"
 
+apt install -y cron
 (crontab -l 2>/dev/null; echo '0 6 * * * /sbin/reboot') | crontab -
 
 sleep 5
